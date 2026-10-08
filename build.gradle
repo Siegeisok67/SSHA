@@ -1,0 +1,71 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.18.3'
+    id 'org.jetbrains.kotlin.jvm' version '2.4.10'
+}
+
+group = 'dev.ssha'
+version = '1.0.4'
+
+base {
+    archivesName = 'ssha-hotm-addon'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
+
+kotlin {
+    jvmToolchain(25)
+}
+
+loom {
+    mods {
+        ssha_hotm_addon {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.14.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    minecraft 'com.mojang:minecraft:26.2'
+    implementation 'net.fabricmc:fabric-loader:0.19.3'
+    implementation 'net.fabricmc.fabric-api:fabric-api:0.155.2+26.2'
+    compileOnly 'maven.modrinth:byNkmv5G:YIQcPmgw'
+    testImplementation 'maven.modrinth:byNkmv5G:YIQcPmgw'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
+        allWarningsAsErrors = true
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
