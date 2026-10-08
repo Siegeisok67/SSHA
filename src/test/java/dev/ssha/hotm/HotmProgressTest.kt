@@ -63,6 +63,13 @@ class HotmProgressTest {
     }
 
     @Test
+    fun `progress advancement and tier crossing use the full next-tier table`() {
+        assertEquals(HotmProgress.Observation(7, 210_000L), HotmProgress.advance(HotmProgress.Observation(6, 138_000L), 138_000L))
+        assertEquals(HotmProgress.Observation(7, 208_900L), HotmProgress.advance(HotmProgress.Observation(6, 100L), 1_200L))
+        assertEquals(1_200L, HotmProgress.totalXpGain(HotmProgress.Observation(6, 100L), HotmProgress.Observation(7, 208_900L)))
+    }
+
+    @Test
     fun `commission estimate always rounds upward`() {
         assertEquals(3L, HotmProgress.commissionsRemaining(2_001L, 1_000L))
         assertEquals(1L, HotmProgress.commissionsRemaining(1L, 750L))

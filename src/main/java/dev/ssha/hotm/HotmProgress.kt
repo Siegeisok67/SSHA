@@ -47,6 +47,31 @@ object HotmProgress {
             previous.xpToNextTier != null && next.xpToNextTier != null
         ) (previous.xpToNextTier - next.xpToNextTier).coerceAtLeast(0L) else 0L
 
+    fun advance(previous: Observation, gainedXp: Long): Observation {
+        var tier = previous.tier ?: return previous
+        var remaining = previous.xpToNextTier ?: return previous
+        if (tier == 10 || gainedXp <= 0L) return previous
+        var gain = gainedXp
+        while (remaining > 0L && gain >= remaining && tier < 10) {
+            gain -= remaining
+            tier++
+            remaining = nextTierXp.getOrNull(tier - 1) ?: 0L
+        }
+        return Observation(tier, if (tier == 10) 0L else remaining - gain)
+    }
+
+    fun totalXpGain(previous: Observation, next: Observation): Long {
+        val oldTier = previous.tier ?: return 0L
+        val tier = next.tier ?: return 0L
+        val oldRemaining = previous.xpToNextTier ?: return 0L
+        val remaining = next.xpToNextTier ?: return 0L
+        if (tier < oldTier) return 0L
+        if (tier == oldTier) return (oldRemaining - remaining).coerceAtLeast(0L)
+        if (oldRemaining == 0L) return 0L
+        return (oldRemaining + (oldTier + 1 until tier).sumOf { nextTierXp.getOrNull(it - 1) ?: 0L } +
+            (nextTierXp.getOrNull(tier - 1) ?: 0L) - remaining).coerceAtLeast(0L)
+    }
+
     /** Parse one item only: a selector's name or an unlock requirement is not the player's tier. */
     fun readObservation(lines: List<String>): Observation? =
         lines.firstOrNull()?.let { readItemObservation(it, lines.drop(1)) }

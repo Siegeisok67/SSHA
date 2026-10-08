@@ -1,5 +1,6 @@
 package dev.ssha.hotm
 
+import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.data.model.TabWidget
 import com.google.gson.GsonBuilder
 import com.mojang.brigadier.arguments.BoolArgumentType
@@ -13,7 +14,6 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
-import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.Minecraft
@@ -29,9 +29,12 @@ class HotmAddon : ClientModInitializer {
     private var lastHoveredTooltip: List<String> = emptyList()
     private var lastHotmMenu: List<Pair<String, List<String>>> = emptyList()
     private lateinit var hudIntegration: HotmHudIntegration
+    private lateinit var grindingIntegration: GrindingIntegration
     private val rateTracker = CommissionRateTracker()
+    private val xpRateTracker = HotmXpRateTracker()
     private var settingsRequested = false
     private var lastRateEnabled = true
+    private var commissionsWasActive = false
     private fun nowMillis(): Long = System.nanoTime() / 1_000_000L
 
     internal fun recordMenu(items: List<Pair<String, List<String>>>): HotmProgress.Observation? {
@@ -48,8 +51,13 @@ class HotmAddon : ClientModInitializer {
 
     override fun onInitializeClient() {
         AddonSettings.load()
-        hudIntegration = HotmHudIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::hudLines)
+        lastRateEnabled = AddonSettings.data.rateEnabled
+        hudIntegration = HotmHudIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::hudLines, rateTracker::estimates)
         hudIntegration.register()
+        grindingIntegration = GrindingIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::nowMillis,
+            { rateTracker.reset(); xpRateTracker.reset(); AddonSettings.data.resumeAutomaticProgress(); AddonSettings.data.activeCommissions = emptyList(); AddonSettings.save() },
+            ::onGameMessage)
+        grindingIntegration.registerWidgets()
         ItemTooltipCallback.EVENT.register { stack, _, _, tooltip ->
             val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*> ?: return@register
             if (!HotmProgress.isHotmInventoryTitle(screen.title.string)) return@register
@@ -57,46 +65,48 @@ class HotmAddon : ClientModInitializer {
             recordHoveredTooltip(stack.hoverName.string, tooltip.map { it.string })?.let(::applyObservation)
         }
         ClientTickEvents.END_CLIENT_TICK.register(::onClientTick)
-        ClientReceiveMessageEvents.GAME.register { message, _ ->
-            if (AddonSettings.data.rateEnabled) rateTracker.completionMessage(message.string, nowMillis())
-            if (!AddonSettings.data.manualProgress && Regex("(?i)commission complete!").containsMatchIn(message.string)) {
-                val now = System.currentTimeMillis()
-                if (now - AddonSettings.data.lastCommissionCompletionAtMs !in 0..COMMISSION_COMPLETION_WINDOW_MS) {
-                    AddonSettings.data.pendingCommissionCompletions = 0
-                }
-                AddonSettings.data.pendingCommissionCompletions = (AddonSettings.data.pendingCommissionCompletions + 1).coerceAtMost(100)
-                AddonSettings.data.lastCommissionCompletionAtMs = now
-                AddonSettings.save()
-            }
-        }
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(createCommand())
         }
         HudElementRegistry.attachElementBefore(
             VanillaHudElements.CHAT,
             Identifier.fromNamespaceAndPath("ssha_hotm_addon", "hotm_tracker"),
-            { graphics, _ -> hudIntegration.render(graphics) },
+            { graphics, _ -> hudIntegration.render(graphics); grindingIntegration.render(graphics) },
         )
     }
 
     private fun onClientTick(minecraft: Minecraft) {
         hudIntegration.tick(minecraft)
+        grindingIntegration.tick(minecraft)
         val now = nowMillis()
+        SkyblockerCompatibility.update(AddonSettings.data.hudEnabled && minecraft.player != null)
         if (settingsRequested) {
             settingsRequested = false
             AddonConfigMenu.open(AddonSettings.data, { AddonSettings.save() },
                 moveWidget = { hudIntegration.requestEditor() }, resetPosition = { hudIntegration.resetPosition() },
-                resetRate = { rateTracker.reset() }, recheck = { requestRecheck(minecraft) })
+                resetRate = { rateTracker.reset(); xpRateTracker.reset(); commissionsWasActive = false }, recheck = { requestRecheck(minecraft) },
+                moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
+                resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
+                resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
             lastRateEnabled = AddonSettings.data.rateEnabled
+            xpRateTracker.clearBaseline()
         }
-        if (minecraft.player == null || !AddonSettings.data.rateEnabled || !TabWidget.COMMISSIONS.isActive) {
-            rateTracker.suspend(now)
-        } else {
+        if (minecraft.player == null || !MiningArea.current() || !AddonSettings.data.rateEnabled) {
+            if (commissionsWasActive) rateTracker.suspend(now)
+            commissionsWasActive = false
+        } else if (TabWidget.COMMISSIONS.isActive) {
             rateTracker.observe(TabWidget.COMMISSIONS.lines.map { it.string }, now)
+            commissionsWasActive = true
+        } else if (commissionsWasActive) {
+            rateTracker.suspend(now)
+            commissionsWasActive = false
+        } else {
+            rateTracker.tick(now)
         }
+        xpRateTracker.update(rateTracker.activeMillis, rateTracker.observedWork, AddonSettings.data.commissionXp)
         val commissions = HotmProgress.activeCommissions(
             if (TabWidget.COMMISSIONS.isActive) TabWidget.COMMISSIONS.lines.map { it.string } else emptyList(),
         )
@@ -119,7 +129,31 @@ class HotmAddon : ClientModInitializer {
             }
             .toList()
 
+    private fun onGameMessage(message: String) {
+        val now = nowMillis()
+        val data = AddonSettings.data
+        val completion = data.rateEnabled && MiningArea.current() && rateTracker.completionMessage(message, now)
+        if (completion) xpRateTracker.completion(now)
+        val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*>
+        val claiming = screen?.title?.string?.contains("Commissions", true) == true ||
+            message.replace(Regex("§."), "").contains("Visit the King to claim your rewards", true)
+        if (xpRateTracker.chat(
+                message, now, data.commissionXp, claiming = claiming,
+                activeEvent = at.hannibal2.skyhanni.data.MiningEventsApi.getActiveEvent() != null,
+            )) {
+            xpRateTracker.lastReward?.let { reward ->
+                if (!data.manualProgress) {
+                    data.applyLiveReward(reward)
+                    xpRateTracker.applyLiveRewardToBaseline(reward.xp)
+                    AddonSettings.save()
+                }
+                rateTracker.rewardActivity(now, completion)
+            }
+        }
+    }
+
     private fun applyObservation(observation: HotmProgress.Observation) {
+        if (!AddonSettings.data.manualProgress) xpRateTracker.observation(observation, nowMillis())
         if (AddonSettings.data.applyAutomaticObservation(observation, System.currentTimeMillis())) AddonSettings.save()
     }
 
@@ -269,7 +303,10 @@ class HotmAddon : ClientModInitializer {
 
     private fun requestRecheck(minecraft: Minecraft) {
         AddonSettings.data.resumeAutomaticProgress()
+        xpRateTracker.clearBaseline()
         AddonSettings.data.activeCommissions = emptyList()
+        rateTracker.suspend(nowMillis())
+        commissionsWasActive = false
         lastHoveredTooltip = emptyList()
         lastHotmMenu = emptyList()
         val screen = minecraft.gui.screen() as? AbstractContainerScreen<*>
@@ -286,16 +323,23 @@ class HotmAddon : ClientModInitializer {
         if (TabWidget.COMMISSIONS.isActive) TabWidget.COMMISSIONS.lines else emptyList(),
         rateTracker,
         nowMillis(),
+        xpRateTracker,
     )
 }
 
 internal data class AddonSettingsData(
+    var updateStream: UpdateStream = UpdateStream.RELEASES,
     var progressFormatVersion: Int = 0,
     var manualProgress: Boolean = false,
     var commissionXp: Long = 750L,
     var hudEnabled: Boolean = true,
     var rateEnabled: Boolean = true,
+    var smoothRates: Boolean = true,
+    var commissionEta: Boolean = false,
     var hudPosition: HudPositionData = HudPositionData(),
+    var grinding: GrindingSettingsData = GrindingSettingsData(),
+    var powder: PowderSettingsData = PowderSettingsData(),
+    var eventAttributionVersion: Int = 0,
     var hotmTier: Int? = null,
     var xpToNextTier: Long? = null,
     var extraEventXp: Long = 0L,
@@ -322,25 +366,29 @@ internal data class AddonSettingsData(
     fun applyAutomaticObservation(observation: HotmProgress.Observation, now: Long): Boolean {
         if (manualProgress) return false
         val previous = HotmProgress.Observation(hotmTier, xpToNextTier)
-        val reduction = HotmProgress.xpReduction(previous, observation)
         if (observation.tier != null && observation.tier != hotmTier) {
             // A new tier invalidates the old XP sample; never combine different tiers.
             xpToNextTier = null
             clearPendingCommissions()
         }
-        if (reduction > 0L) {
-            val completions = if (now - lastCommissionCompletionAtMs in 0..COMMISSION_COMPLETION_WINDOW_MS) {
-                pendingCommissionCompletions
-            } else 0
-            extraEventXp += HotmProgress.eventXpForReduction(reduction, completions, commissionXp)
-            clearPendingCommissions()
-        }
+        // Menu deltas cannot reliably distinguish base rewards, daily bonuses, and events.
+        // Only explicitly identified live event reward messages add to extraEventXp.
         observation.tier?.let { hotmTier = it }
         observation.xpToNextTier?.let { xpToNextTier = it }
         return previous != HotmProgress.Observation(hotmTier, xpToNextTier)
     }
 
+    fun applyLiveReward(reward: HotmXpRateTracker.Reward) {
+        if (manualProgress) return
+        val current = HotmProgress.Observation(hotmTier, xpToNextTier)
+        val advanced = HotmProgress.advance(current, reward.xp)
+        if (current != advanced) { hotmTier = advanced.tier; xpToNextTier = advanced.xpToNextTier }
+        if (reward.eventXp > 0L) extraEventXp += reward.eventXp
+    }
+
     fun prepareAfterLoad() {
+        GrindingMaterial.entries.forEach { material -> grinding[material].compactAt = grinding[material].compactAt.coerceIn(1L, 1_000_000_000_000L) }
+        if (eventAttributionVersion < 1) { extraEventXp = 0L; eventAttributionVersion = 1 }
         commissionXp = commissionXp.coerceAtLeast(1L)
         pendingCommissionCompletions = pendingCommissionCompletions.coerceIn(0, 100)
         if (progressFormatVersion < 1) {
@@ -383,7 +431,5 @@ private object AddonSettings {
         }
     }
 }
-
-private const val COMMISSION_COMPLETION_WINDOW_MS = 60_000L
 
 private fun Long.prettyNumber(): String = String.format(Locale.US, "%,d", this)

@@ -3,13 +3,14 @@ package dev.ssha.hotm
 import net.minecraft.network.chat.Component
 import java.util.Locale
 
-/** Text layout only; rendering and spacing use SkyHanni's commission-widget renderer. */
+/** Supplies the summary and commission data for the Skyblocker-inspired panel. */
 internal object HotmHudDisplay {
     fun lines(
         settings: AddonSettingsData,
         commissionWidget: List<Component> = emptyList(),
         rate: CommissionRateTracker? = null,
         now: Long = 0L,
+        xpRate: HotmXpRateTracker? = null,
     ): List<Component> = buildList {
         fun row(text: String) { add(Component.literal(text)) }
 
@@ -34,9 +35,18 @@ internal object HotmHudDisplay {
             }
         }
         if (settings.rateEnabled && rate != null) {
-            val value = rate.perHour()?.let { String.format(Locale.US, "%.1f", it) } ?: "—"
+            val value = rate.averageCompletionsPerHour(settings.smoothRates)?.let { String.format(Locale.US, "%.1f", it) }
+                ?: if (rate.activeMillis < SmoothedHourlyRate.WARMUP_MS) "Collecting…" else "—"
             val state = if (rate.isPaused(now)) " §8(Paused)" else ""
-            row(" §fCommissions/h: §a$value$state")
+            row(" §fAvg. Commissions/h: §a$value$state")
+            if (xpRate != null) {
+                val xpValue = xpRate.average(rate.activeMillis, rate.observedWork, settings.commissionXp, settings.smoothRates)
+                    ?.let { String.format(Locale.US, "%,.0f", it) } ?: "Collecting…"
+                val estimate = if (xpRate.hasObservedXp) " §8(Observed)" else " §8(Est.)"
+                row(" §fAvg. HOTM XP/h: §b$xpValue$estimate")
+                if (xpRate.dailyBonuses > 0) row(" §fDaily bonuses seen: §e${xpRate.dailyBonuses}/4 §8(est.)")
+            }
+            row(" §fActive time: §e${rate.activeTime()}")
         }
         if (settings.extraEventXp > 0L) row(" §fEvent/mineshaft XP: §a+${settings.extraEventXp.prettyNumber()}")
 

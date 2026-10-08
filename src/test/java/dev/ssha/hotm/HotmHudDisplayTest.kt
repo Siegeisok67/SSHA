@@ -72,14 +72,15 @@ class HotmHudDisplayTest {
     @Test
     fun `hourly rate is shown with idle pause state and can be disabled`() {
         val rate = CommissionRateTracker()
-        rate.completionMessage("Mithril Miner Commission Complete!", 0L)
-        rate.tick(60_000L)
+        rate.observe(listOf("Mithril Miner: 0%"), 0L)
+        rate.observe(listOf("Mithril Miner: 1%"), 0L)
+        for (second in 10..60 step 10) rate.observe(listOf("Mithril Miner: ${second}%"), second * 1_000L)
         val settings = AddonSettingsData()
-        assertEquals(" §fCommissions/h: §a60.0", HotmHudDisplay.lines(settings, rate = rate, now = 60_000L)[2].string)
+        assertEquals(" §fAvg. Commissions/h: §a36.0", HotmHudDisplay.lines(settings, rate = rate, now = 60_000L)[2].string)
         rate.tick(600_000L)
-        assertEquals(" §fCommissions/h: §a40.0 §8(Paused)", HotmHudDisplay.lines(settings, rate = rate, now = 600_000L)[2].string)
+        assertEquals(" §fAvg. Commissions/h: §a34.2 §8(Paused)", HotmHudDisplay.lines(settings, rate = rate, now = 600_000L)[2].string)
         settings.rateEnabled = false
-        assertFalse(HotmHudDisplay.lines(settings, rate = rate).any { it.string.contains("Commissions/h") })
+        assertFalse(HotmHudDisplay.lines(settings, rate = rate).any { it.string.contains("Avg. Commissions/h") })
     }
 
     @Test

@@ -11,6 +11,7 @@
     "issues": "https://github.com/Siegeisok67/SSHA/issues"
   },
   "environment": "client",
+  "mixins": ["ssha.mixins.json"],
   "entrypoints": {
     "client": [
       {

@@ -26,10 +26,16 @@ internal object AddonConfigMenu {
         resetPosition: () -> Unit,
         resetRate: () -> Unit,
         recheck: () -> Unit,
+        moveGrinding: (GrindingMaterial) -> Unit,
+        resetGrindingPosition: (GrindingMaterial) -> Unit,
+        resetGrinding: (GrindingMaterial) -> Unit,
+        movePowder: () -> Unit,
+        resetPowderPosition: () -> Unit,
+        resetPowder: () -> Unit,
     ) {
-        val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck) { message ->
-            ChatUtils.chat(message)
-        }
+        val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
+            { message -> ChatUtils.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
+            movePowder, resetPowderPosition, resetPowder)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -44,16 +50,31 @@ class AddonMenuConfig internal constructor(
     resetRate: () -> Unit,
     recheck: () -> Unit,
     notify: (String) -> Unit,
+    moveGrinding: (GrindingMaterial) -> Unit = {},
+    resetGrindingPosition: (GrindingMaterial) -> Unit = {},
+    resetGrinding: (GrindingMaterial) -> Unit = {},
+    movePowder: () -> Unit = {},
+    resetPowderPosition: () -> Unit = {},
+    resetPowder: () -> Unit = {},
 ) : Config() {
+    @Expose @JvmField
+    @Category(name = "About", desc = "SSHA version, update stream, credits and project links.")
+    val about = AboutMenuConfig(settings, save)
+
     @Expose @JvmField
     @Category(name = "Mining", desc = "Siege's SkyHanni Addons — HOTM and commissions")
     val mining = MiningMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck, notify)
+
+    @Expose @JvmField
+    @Category(name = "Grinding", desc = "Separate compact material widgets. All trackers and popups start disabled.")
+    val grinding = GrindingMenuConfig(settings.grinding, save, moveGrinding, resetGrindingPosition, resetGrinding, notify,
+        settings.powder, movePowder, resetPowderPosition, resetPowder)
 
     internal fun createProcessor(): MoulConfigProcessor<AddonMenuConfig> = MoulConfigProcessor.withDefaults(this).also {
         ConfigProcessorDriver(it).processConfig(this)
     }
 
-    override fun getTitle(): StructuredText = StructuredText.of("§eSSHA §7— Siege's SkyHanni Addons")
+    override fun getTitle(): StructuredText = StructuredText.of("§bSSHA ${installedVersion()} §7by §eSiege §7— SkyHanni + Skyblocker-inspired QOL")
     override fun saveNow() = save()
 }
 
@@ -87,9 +108,19 @@ class WidgetMenuConfig internal constructor(
     val enabled: Property<Boolean> = bound({ settings.hudEnabled }, { settings.hudEnabled = it })
 
     @Expose @JvmField
-    @ConfigOption(name = "Commissions per Hour", desc = "Track completed commissions over active time. Pauses after 90 seconds without positive commission progress. Session statistics reset on restart.")
+    @ConfigOption(name = "Hourly Averages", desc = "Use partial commission progress and observed HOTM XP over active time. Pauses after 20 seconds without commission progress. Rates need 60 seconds of active time; session statistics reset on restart.")
     @ConfigEditorBoolean
     val rateEnabled: Property<Boolean> = bound({ settings.rateEnabled }, { settings.rateEnabled = it })
+
+    @Expose @JvmField
+    @ConfigOption(name = "Smooth Hourly Averages", desc = "Use a 90-second time-based smoothing filter after the 60-second warmup to reduce sudden rate swings.")
+    @ConfigEditorBoolean
+    val smoothRates: Property<Boolean> = bound({ settings.smoothRates }, { settings.smoothRates = it })
+
+    @Expose @JvmField
+    @ConfigOption(name = "Commission Finish Estimates", desc = "Off by default. Estimate each commission's remaining time from its percentage gain over active time. Requires at least 10 seconds and observed progress; luck and travel can change the estimate.")
+    @ConfigEditorBoolean
+    val commissionEta: Property<Boolean> = bound({ settings.commissionEta }, { settings.commissionEta = it })
 
     @Expose @JvmField
     @ConfigOption(name = "XP per Commission", desc = "Estimated reward used for the remaining commission count (1 to 1,000,000,000). Apply using the button below.")

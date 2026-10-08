@@ -1,0 +1,7 @@
+{
+  "required": false,
+  "package": "dev.ssha.hotm.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["SkyblockerCommissionMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

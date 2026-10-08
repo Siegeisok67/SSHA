@@ -4,10 +4,10 @@ plugins {
 }
 
 group = 'dev.ssha'
-version = '1.0.4'
+version = '1.1.0'
 
 base {
-    archivesName = 'ssha-hotm-addon'
+    archivesName = 'ssha'
 }
 
 java {
@@ -63,6 +63,20 @@ processResources {
     inputs.property 'version', project.version
     filesMatching('fabric.mod.json') {
         expand 'version': project.version
+    }
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveFileName = "ssha_${project.version}${archiveClassifier.getOrElse('') ? '-' + archiveClassifier.get() : ''}.${archiveExtension.get()}"
+}
+
+tasks.register('releaseSource', Zip) {
+    archiveFileName = "ssha_${project.version}-source.zip"
+    destinationDirectory = layout.buildDirectory.dir('release')
+    into("ssha_${project.version}") {
+        from('src') { into 'src' }
+        from('gradle') { into 'gradle' }
+        from('README.md', 'RELEASE_NOTES.md', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', '.gitignore', '.gitattributes')
     }
 }
 

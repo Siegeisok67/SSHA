@@ -5,32 +5,31 @@ import org.junit.jupiter.api.Test
 
 class CommissionRateTrackerTest {
     @Test
-    fun `first sample is a baseline and unchanged rows do not start clock`() {
+    fun `first row and unchanged rows never start timer`() {
         val tracker = CommissionRateTracker()
         tracker.observe(listOf("Commissions:", "Mithril Miner: 10%"), 0L)
         tracker.observe(listOf("Mithril Miner: 10%"), 600_000L)
         assertTrue(tracker.isPaused(600_000L))
         assertEquals(0L, tracker.activeMillis)
-        assertEquals(null, tracker.perHour())
+        assertNull(tracker.perHour())
     }
 
     @Test
-    fun `timer clips idle gap at exactly ninety seconds and resumes without gap`() {
+    fun `timer clips idle gap at twenty seconds and resumes only on progress`() {
         val tracker = CommissionRateTracker()
         tracker.observe(listOf("Mithril Miner: 0%"), 0L)
         tracker.observe(listOf("Mithril Miner: 1%"), 1_000L)
-        tracker.completionMessage("MITHRIL MINER Commission Complete! Visit the King", 31_000L)
-        tracker.tick(121_000L)
-        assertTrue(tracker.isPaused(121_000L))
-        assertEquals(120_000L, tracker.activeMillis)
-        assertEquals(30.0, tracker.perHour())
-        tracker.tick(900_000L)
-        assertEquals(120_000L, tracker.activeMillis)
+        tracker.completionMessage("MITHRIL MINER Commission Complete! Visit the King", 11_000L)
+        tracker.tick(31_000L)
+        assertTrue(tracker.isPaused(31_000L))
+        assertEquals(30_000L, tracker.activeMillis)
+        assertEquals(120.0, tracker.perHour()!!, 0.0001)
         tracker.observe(listOf("Mithril Miner: 0%"), 900_000L)
+        assertTrue(tracker.isPaused(900_000L))
         tracker.observe(listOf("Mithril Miner: 2%"), 901_000L)
         assertFalse(tracker.isPaused(901_000L))
         tracker.tick(911_000L)
-        assertEquals(130_000L, tracker.activeMillis)
+        assertEquals(40_000L, tracker.activeMillis)
     }
 
     @Test
@@ -48,7 +47,7 @@ class CommissionRateTrackerTest {
     }
 
     @Test
-    fun `new rows disappearing rows decreases and first done sample are not completion evidence`() {
+    fun `new disappearing decreasing and first done samples do not activate timer`() {
         val tracker = CommissionRateTracker()
         tracker.observe(listOf("Mithril Miner: DONE"), 0L)
         tracker.observe(emptyList(), 1_000L)
@@ -62,7 +61,7 @@ class CommissionRateTrackerTest {
     }
 
     @Test
-    fun `chat before first tab sample and temporary widget disappearance cannot double count`() {
+    fun `temporary widget disappearance cannot double count`() {
         val tracker = CommissionRateTracker()
         tracker.completionMessage("Mithril Miner Commission Complete!", 0L)
         tracker.observe(listOf("Mithril Miner: 99%"), 1_000L)
@@ -78,6 +77,21 @@ class CommissionRateTrackerTest {
     }
 
     @Test
+    fun `partial progress average and ETA use observed percentage and active duration`() {
+        val tracker = CommissionRateTracker()
+        tracker.observe(listOf("Mithril Miner: 0%"), 0L)
+        tracker.observe(listOf("Mithril Miner: 1%"), 1_000L)
+        for (second in 11..61 step 10) tracker.observe(listOf("Mithril Miner: ${second}%"), second * 1_000L)
+        assertEquals(60_000L, tracker.activeMillis)
+        assertEquals(0.61, tracker.observedWork, 0.0001)
+        assertEquals(36.6, tracker.averagePerHour(false)!!, 0.0001)
+        assertNotNull(tracker.averagePerHour(true))
+        assertEquals("~0m 38s", tracker.estimates()["MITHRIL MINER"])
+        tracker.tick(81_000L)
+        assertEquals("Collecting…", tracker.estimates()["MITHRIL MINER"])
+    }
+
+    @Test
     fun `disconnect excludes offline time and reset clears entire session`() {
         val tracker = CommissionRateTracker()
         tracker.completionMessage("Mithril Miner Commission Complete!", 0L)
@@ -87,7 +101,7 @@ class CommissionRateTrackerTest {
         tracker.reset()
         assertEquals(0L, tracker.activeMillis)
         assertEquals(0L, tracker.completed)
-        assertEquals(null, tracker.perHour())
+        assertNull(tracker.perHour())
         assertTrue(tracker.isPaused(600_000L))
     }
 }

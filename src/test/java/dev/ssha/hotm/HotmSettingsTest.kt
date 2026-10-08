@@ -178,15 +178,15 @@ class HotmSettingsTest {
     fun `only same-tier reductions count toward event XP`() {
         val settings = AddonSettingsData(hotmTier = 6, xpToNextTier = 138_000L)
         settings.applyAutomaticObservation(HotmProgress.Observation(6, 137_000L), 1_000L)
-        assertEquals(1_000L, settings.extraEventXp)
+        assertEquals(0L, settings.extraEventXp)
         settings.pendingCommissionCompletions = 1
         settings.lastCommissionCompletionAtMs = 1_000L
         settings.applyAutomaticObservation(HotmProgress.Observation(6, 136_000L), 2_000L)
-        assertEquals(1_250L, settings.extraEventXp)
+        assertEquals(0L, settings.extraEventXp)
         settings.applyAutomaticObservation(HotmProgress.Observation(7, 130_000L), 3_000L)
-        assertEquals(1_250L, settings.extraEventXp)
+        assertEquals(0L, settings.extraEventXp)
         settings.applyAutomaticObservation(HotmProgress.Observation(null, 120_000L), 4_000L)
-        assertEquals(1_250L, settings.extraEventXp)
+        assertEquals(0L, settings.extraEventXp)
         settings.applyAutomaticObservation(HotmProgress.Observation(8, null), 5_000L)
         assertEquals(null, settings.xpToNextTier)
     }

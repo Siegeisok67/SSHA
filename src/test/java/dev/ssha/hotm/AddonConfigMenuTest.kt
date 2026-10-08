@@ -83,6 +83,16 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
+        listOf("version", "stream", "updates", "source", "issues").forEach { field ->
+            val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
+            assertNotNull(option, "About $field")
+            assertNotNull(checkNotNull(option).editor)
+        }
+        listOf("enabled", "overflowWarning", "showStored", "showSession", "smoothRate", "move").forEach { field ->
+            assertNotNull(processor.getOptionFromField(GrindingWidgetMenuConfig::class.java.getField(field)), field)
+        }
+        config.about.stream.set(UpdateStream.ALL)
+        assertEquals(UpdateStream.ALL, config.about.stream.get())
         listOf("enabled", "rateEnabled", "tier", "earnedXp", "commissionXp", "applyReward", "applyManual", "move", "recheck", "resetAll", "resetRate", "resetEvents", "resetPosition").forEach { field ->
             val option = processor.getOptionFromField(WidgetMenuConfig::class.java.getField(field))
             assertNotNull(option, field)
