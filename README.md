@@ -2,9 +2,13 @@
 
 An independent Fabric client addon with a Skyblocker-inspired teal HUD and SkyHanni integration. Created by Siege ([Siegeisok67](https://github.com/Siegeisok67)). No SkyHanni, Skyblocker or SkyOcean source/assets are bundled.
 
+## Project ownership and AI assistance
+
+The source is included so SSHA can be inspected, built, tested, maintained, and improved by its author and contributors. Siege is the project author and maintainer. AI coding tools have assisted with implementation as well as reviewing logic, double-checking changes, and spotting possible errors; the project is therefore not presented as AI-free or as entirely human-written. Siege decides which changes to keep and is responsible for reviewing and testing the project. Automated checks are documented below; some live Minecraft behavior still needs in-game verification.
+
 ## Install
 
-Download **ssha_1.1.0.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
+Download **ssha_1.1.1.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
 
 Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API **0.155.2+26.2**, Fabric Language Kotlin **1.13.12+kotlin.2.4.0+**, and compatible SkyHanni **9.0.0+**. Skyblocker and SkyOcean are optional, not runtime requirements.
 
@@ -14,7 +18,7 @@ Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API 
 - Widgets appear only in SkyBlock's Dwarven Mines (including Glacite Tunnels), Crystal Hollows and Glacite Mineshafts, never the Hypixel lobby. The position editor can preview enabled widgets outside these areas.
 - Skyblocker's commission widget rendering is suppressed while SSHA's HOTM HUD is enabled in a supported area. Disabling SSHA restores it automatically; Skyblocker's saved layout/config is not modified. Compatibility targets Skyblocker 6.10.4's TabHudWidget API; other versions need live verification.
 - `/ssha gui` edits the HOTM widget and every enabled grinding/powder widget together. Drag to move, scroll to resize, close to save. A material's Move button also includes other enabled widgets.
-- Commission timing starts/resumes only on positive progress or completion, not on first tab visibility. All trackers pause after **20 seconds** without progress. Suspended/offline gaps are excluded. Rates warm up after **60 seconds of active time**, with optional **90-second exponential smoothing**.
+- Commission timing starts/resumes only on positive progress or completion, not on first tab visibility. Commission and powder/material trackers pause after **20 seconds** without progress. HOTM XP/h instead uses elapsed eligible mining-session time (including claims, travel and idle time), so delayed bulk rewards cannot inflate rates using a short commission-progress denominator. It only displays actual observed XP, not partial commission XP estimates. Suspended/offline gaps are excluded. Rates warm up after **60 seconds of active time**, with optional **90-second exponential smoothing**.
 - Avg. Commissions/h counts observed partial commission work, not just finished commissions. Optional finish estimates use percentage gained over active time; travel, luck and coarse tab updates affect accuracy.
 - Separate gold, diamond, mithril, titanium, umber, tungsten, Glacite Jewel and Mithril Powder widgets. Material widgets/popups start disabled.
 - Sack gains use a **1-second** reconciliation window (rather than 10 seconds) to reject nearby withdrawals/compaction. Inventory pickups are also tracked outside container screens. Opening a sack updates holdings immediately; opening does not count existing holdings as session gain.
@@ -22,8 +26,10 @@ Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API 
 - **Sack overflow!** warnings default on for enabled trackers, fire once at/above known item capacity, and rearm below it. Reaching the limit is treated as overflow risk because the server normally caps stored counts there.
 - Optional **Compact to blocks!** reminder for gold/diamond at a configurable raw-equivalent threshold.
 - **Est. Profit/h** uses product equivalents/hour and Bazaar instant-sell prices. Session details show product-equivalent value and observed Supercraft output/value. Refined materials/handles are estimates, not completed forge outputs; no forge costs/time, taxes or realized sales are included. Known stored totals can be partial until all relevant sacks are opened.
-- Mithril Powder counts actual SkyHanni deltas without multiplying Double Powder twice. Event rewards remain classified for five seconds after an event ends; nearby already-received deltas can be reclassified without double counting. Powder itself has no coin value.
-- `/ssha` opens About first: installed version, manual stable/all-release links, credits, source and issue links. No automatic jar replacement or background update checker.
+- Mithril Powder counts actual SkyHanni deltas without multiplying Double Powder twice. Only explicit Goblin Raid/Raffle/Mithril Gourmand end-reward amounts and powder during 2x Powder enter the event subtotal; passive Better Together/Gone with the Wind gains remain normal mining powder. Original reward chat is reconciled with total deltas with a one-second delay and five-second matching window, including merged mining/reward totals. **Include Commission Powder** is off by default (Grinding → Mithril Powder); identified commission powder is excluded unless enabled. Powder itself has no coin value.
+- HOTM reward messages update XP left and commissions left immediately after an initial `/hotm` capture, even if another mod hides chat. Refreshed menu lore reconciles rewards once, and repeated/partially stale lore cannot overwrite newer live values. Manual progress deliberately stays fixed until `/ssha auto`.
+- **Pickaxe Ability Reset Title** is off by default (Mining → HOTM Widget). It shows **Pickaxe Ability Reset** once on a server cooldown→Available/Ready transition or explicit reset message. Actual cooldown comes from the Pickaxe Ability tab widget, not a fixed 120-second assumption; enable that server widget to reliably observe cooldown readiness. No guessed countdown expiration generates a title.
+- `/ssha` opens About first: installed version, release links, an on-demand stable-release checker, and an install action. The checker excludes pre-releases and accepts only the exact versioned SSHA JAR hosted on the official GitHub release, with its SHA-256 digest verified before scheduling replacement. The jar swap runs after Minecraft exits; it does not restart the game or launcher, so relaunch from your normal launcher. No background update checks run. Use Releases for manual downloads if the in-game check/install fails.
 
 ## Commands
 
@@ -46,9 +52,9 @@ Settings remain at `config/ssha-hotm-addon.json` for compatibility. Session rate
 
 ## Build and verification
 
-Java 25: `./gradlew build releaseSource` (Windows: `gradlew.bat build releaseSource`).
+Java 25: `./gradlew build` (Windows: `gradlew.bat build`).
 
-- Installable client jar: `build/libs/ssha_1.1.0.jar`
-- Buildable source archive: `build/release/ssha_1.1.0-source.zip`
+- Installable client jar: `build/libs/ssha_1.1.1.jar`
+- GitHub automatically prepares the source archive when a release is published.
 
-Automated tests cover parsing, command dispatch/settings persistence, rates/pause/resume, completion deduplication, sack lore/capacities, reconciliation, event reward classification and renderer bounds. A build cannot prove live Hypixel packet behavior, Skyblocker mixin compatibility, editor mouse interactions or appearance; these still need in-game verification. Never include personal Minecraft config, credentials, logs or caches in source releases.
+Automated tests cover parsing, command dispatch/settings persistence, rates/pause/resume, completion deduplication, sack lore/capacities, reconciliation, event reward classification and renderer bounds. A build cannot prove live Hypixel packet behavior, Skyblocker mixin compatibility, editor mouse interactions or appearance; these still need in-game verification. Never include personal Minecraft config, credentials, logs or caches in releases.

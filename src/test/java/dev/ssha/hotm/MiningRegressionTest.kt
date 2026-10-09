@@ -68,17 +68,17 @@ class MiningRegressionTest {
     @Test
     fun `event ended before reward and reward before ended classify powder once`() {
         val tracker = MithrilPowderTracker()
-        tracker.gainPowder(19_850L, 1_000L, false)
-        tracker.eventMessage("RAFFLE ENDED!", 1_050L)
+        val accounting = PowderAccounting()
+        accounting.delta(19_850L, 1_000L, null)
+        accounting.message("RAFFLE ENDED!", 1_050L)
+        accounting.message("+19,850 Mithril Powder", 1_100L)
+        accounting.drain(2_000L, false) { gain, at -> tracker.gainPowder(gain, at) }
         assertEquals(19_850L, tracker.powder)
         assertEquals(19_850L, tracker.powderDuringEvents)
-        tracker.eventMessage("RAFFLE rewards received", 1_100L)
+        accounting.delta(100L, 2_000L, null)
+        accounting.drain(3_000L, false) { gain, at -> tracker.gainPowder(gain, at) }
+        assertEquals(19_950L, tracker.powder)
         assertEquals(19_850L, tracker.powderDuringEvents)
-        tracker.gainPowder(100L, 2_000L, false)
-        assertEquals(19_950L, tracker.powderDuringEvents)
-        tracker.gainPowder(10L, 10_000L, false)
-        assertEquals(19_960L, tracker.powder)
-        assertEquals(19_950L, tracker.powderDuringEvents)
     }
 
     @Test

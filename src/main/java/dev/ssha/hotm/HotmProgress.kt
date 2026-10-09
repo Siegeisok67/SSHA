@@ -52,7 +52,7 @@ object HotmProgress {
         var remaining = previous.xpToNextTier ?: return previous
         if (tier == 10 || gainedXp <= 0L) return previous
         var gain = gainedXp
-        while (remaining > 0L && gain >= remaining && tier < 10) {
+        while (gain >= remaining && tier < 10) {
             gain -= remaining
             tier++
             remaining = nextTierXp.getOrNull(tier - 1) ?: 0L

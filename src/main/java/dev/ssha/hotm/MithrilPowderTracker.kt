@@ -6,6 +6,7 @@ internal data class PowderSettingsData(
     var showProfit: Boolean = true,
     var showMaterials: Boolean = true,
     var showEvents: Boolean = true,
+    var includeCommissionPowder: Boolean = false,
     var position: HudPositionData = HudPositionData(8, 500),
 )
 
@@ -18,9 +19,6 @@ internal class MithrilPowderTracker {
     private var lastActivity: Long? = null
     private val drops = mutableMapOf<String, Long>()
     private val miningDrops = mutableMapOf<String, Long>()
-    private var eventRewardUntil = Long.MIN_VALUE
-    private data class PowderGain(val amount: Long, val at: Long, var event: Boolean)
-    private val recentPowder = ArrayDeque<PowderGain>()
     private val pendingProfit = mutableListOf<Pair<Long, Map<String, Long>>>()
     var powder: Long = 0L
         private set
@@ -35,10 +33,7 @@ internal class MithrilPowderTracker {
         if (amount <= 0L) return
         activity(now)
         powder += amount
-        val event = duringEvent || now <= eventRewardUntil
-        recentPowder.addLast(PowderGain(amount, now, event))
-        while (recentPowder.isNotEmpty() && now - recentPowder.first().at > 5_000L) recentPowder.removeFirst()
-        if (event) powderDuringEvents += amount
+        if (duringEvent) powderDuringEvents += amount
     }
     fun sack(deltas: Map<String, Long>, now: Long, incompleteRemovals: Boolean) {
         mithril.changes(deltas, now, incompleteRemovals)
@@ -67,16 +62,9 @@ internal class MithrilPowderTracker {
         pendingProfit.add(now to mapOf(id to amount))
         activity(now)
     }
-    fun eventMessage(message: String, now: Long) {
-        val event = Regex("(?i)(?:goblin raid|raffle|mithril gourmand|mining event|2x powder|double powder).*(?:ended|rewards?|received|earned)")
-        if (!event.containsMatchIn(message)) return
-        eventRewardUntil = now + 5_000L
-        // Reward totals can arrive before the event-ended chat/handler. Reclassify only
-        // recent deltas, never add powder again or multiply already-buffed API amounts.
-        recentPowder.filter { !it.event && now - it.at in 0L..5_000L }.forEach {
-            powderDuringEvents += it.amount
-            it.event = true
-        }
+    fun gainPowder(gain: PowderAccounting.Gain, now: Long) {
+        gainPowder(gain.amount, now, false)
+        powderDuringEvents += gain.eventAmount
     }
     private fun activity(now: Long) { tick(now); lastActivity = now }
     fun tick(now: Long) {
@@ -126,9 +114,9 @@ internal class MithrilPowderTracker {
         return "%02d:%02d:%02d".format(java.util.Locale.US, seconds / 3_600, seconds / 60 % 60, seconds % 60)
     }
     fun paused(now: Long): Boolean = lastActivity?.let { now - it >= CommissionRateTracker.IDLE_TIMEOUT_MS } ?: true
-    fun suspend(now: Long) { tick(now); pendingProfit.clear(); recentPowder.clear(); eventRewardUntil = Long.MIN_VALUE; lastActivity = null; mithril.suspend(now); titanium.suspend(now) }
+    fun suspend(now: Long) { tick(now); pendingProfit.clear(); lastActivity = null; mithril.suspend(now); titanium.suspend(now) }
     fun reset() {
-        mithril.reset(); titanium.reset(); powderRate.reset(); profitRate.reset(); drops.clear(); miningDrops.clear(); pendingProfit.clear(); recentPowder.clear(); eventRewardUntil = Long.MIN_VALUE
+        mithril.reset(); titanium.reset(); powderRate.reset(); profitRate.reset(); drops.clear(); miningDrops.clear(); pendingProfit.clear()
         powder = 0L; powderDuringEvents = 0L; activeMillis = 0L; creditedThrough = null; lastActivity = null
     }
 }

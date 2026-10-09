@@ -85,7 +85,6 @@ class GrindingTrackerTest {
         assertEquals(1, tracker.dailyBonuses)
         assertEquals(900L, tracker.dailyBonusXp)
         assertEquals(HotmProgress.Observation(6, 136_350L), run {
-            tracker.applyLiveRewardToBaseline(1_650L)
             HotmProgress.advance(HotmProgress.Observation(6, 138_000L), 1_650L)
         })
         assertEquals(1_650L, tracker.lastReward?.xp)

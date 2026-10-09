@@ -1,7 +1,10 @@
 package dev.ssha.hotm
 
-import at.hannibal2.skyhanni.data.ProfileStorageData
+import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.data.model.TabWidget
+import at.hannibal2.skyhanni.utils.ChatUtils
+import at.hannibal2.skyhanni.utils.SkyBlockUtils
+import kotlin.time.Duration.Companion.seconds
 import com.google.gson.GsonBuilder
 import com.mojang.brigadier.arguments.BoolArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -22,8 +25,13 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import org.slf4j.LoggerFactory
+import moe.nea.libautoupdate.CurrentVersion
+import moe.nea.libautoupdate.PotentialUpdate
+import moe.nea.libautoupdate.UpdateContext
+import moe.nea.libautoupdate.UpdateTarget
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class HotmAddon : ClientModInitializer {
     private var lastHoveredTooltip: List<String> = emptyList()
@@ -32,13 +40,20 @@ class HotmAddon : ClientModInitializer {
     private lateinit var grindingIntegration: GrindingIntegration
     private val rateTracker = CommissionRateTracker()
     private val xpRateTracker = HotmXpRateTracker()
+    private val pickaxeResetTracker = PickaxeResetTracker()
+    private enum class PickaxeTitle { RESET }
     private var settingsRequested = false
+    private val logger = LoggerFactory.getLogger("SSHA Update")
+    private var pendingUpdate: PotentialUpdate? = null
+    private var updateCheckInProgress = false
+    private var updateInstallInProgress = false
     private var lastRateEnabled = true
     private var commissionsWasActive = false
     private fun nowMillis(): Long = System.nanoTime() / 1_000_000L
 
     internal fun recordMenu(items: List<Pair<String, List<String>>>): HotmProgress.Observation? {
         lastHotmMenu = items.filter { HotmProgress.isProgressItemName(it.first) }
+
         return HotmProgress.readMenuObservation(lastHotmMenu)
     }
 
@@ -55,9 +70,26 @@ class HotmAddon : ClientModInitializer {
         hudIntegration = HotmHudIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::hudLines, rateTracker::estimates)
         hudIntegration.register()
         grindingIntegration = GrindingIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::nowMillis,
-            { rateTracker.reset(); xpRateTracker.reset(); AddonSettings.data.resumeAutomaticProgress(); AddonSettings.data.activeCommissions = emptyList(); AddonSettings.save() },
-            ::onGameMessage)
+            {
+                rateTracker.reset()
+                xpRateTracker.reset()
+                pickaxeResetTracker.reset()
+                AddonSettings.data.resumeAutomaticProgress()
+                AddonSettings.data.activeCommissions = emptyList()
+                AddonSettings.save()
+            })
         grindingIntegration.registerWidgets()
+        LiveGameMessages.listen { message ->
+            if (SkyBlockUtils.inSkyBlock) {
+                message.lines().forEach { line ->
+                    onGameMessage(line)
+                    grindingIntegration.onGameMessage(line)
+                    if (AddonSettings.data.pickaxeResetTitle && MiningArea.current()) {
+                        if (pickaxeResetTracker.message(line, nowMillis())) showPickaxeReset()
+                    }
+                }
+            }
+        }
         ItemTooltipCallback.EVENT.register { stack, _, _, tooltip ->
             val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*> ?: return@register
             if (!HotmProgress.isHotmInventoryTitle(screen.title.string)) return@register
@@ -80,6 +112,9 @@ class HotmAddon : ClientModInitializer {
         grindingIntegration.tick(minecraft)
         val now = nowMillis()
         SkyblockerCompatibility.update(AddonSettings.data.hudEnabled && minecraft.player != null)
+        if (!AddonSettings.data.pickaxeResetTitle || minecraft.player == null || !MiningArea.current()) pickaxeResetTracker.reset()
+        else if (TabWidget.PICKAXE_COOLDOWN.isActive &&
+            pickaxeResetTracker.observe(TabWidget.PICKAXE_COOLDOWN.lines.map { it.string }, now)) showPickaxeReset()
         if (settingsRequested) {
             settingsRequested = false
             AddonConfigMenu.open(AddonSettings.data, { AddonSettings.save() },
@@ -87,12 +122,13 @@ class HotmAddon : ClientModInitializer {
                 resetRate = { rateTracker.reset(); xpRateTracker.reset(); commissionsWasActive = false }, recheck = { requestRecheck(minecraft) },
                 moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
-                resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder)
+                resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
+                checkForUpdates = ::checkForUpdates, installAvailableUpdate = ::installAvailableUpdate)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
             lastRateEnabled = AddonSettings.data.rateEnabled
-            xpRateTracker.clearBaseline()
+            xpRateTracker.reset()
         }
         if (minecraft.player == null || !MiningArea.current() || !AddonSettings.data.rateEnabled) {
             if (commissionsWasActive) rateTracker.suspend(now)
@@ -106,7 +142,9 @@ class HotmAddon : ClientModInitializer {
         } else {
             rateTracker.tick(now)
         }
-        xpRateTracker.update(rateTracker.activeMillis, rateTracker.observedWork, AddonSettings.data.commissionXp)
+        val xpEligible = minecraft.player != null && MiningArea.current() && AddonSettings.data.rateEnabled
+        if (xpEligible && !rateTracker.isPaused(now)) xpRateTracker.start(now)
+        xpRateTracker.tick(now, xpEligible)
         val commissions = HotmProgress.activeCommissions(
             if (TabWidget.COMMISSIONS.isActive) TabWidget.COMMISSIONS.lines.map { it.string } else emptyList(),
         )
@@ -120,6 +158,116 @@ class HotmAddon : ClientModInitializer {
         recordMenu(menuItems(screen))?.let(::applyObservation)
     }
 
+    private fun checkForUpdates() {
+        if (updateCheckInProgress) {
+            notify("§eSSHA update check is already running.")
+            return
+        }
+        val context = updateContext()
+        if (context == null) {
+            notify("§eThe in-game updater requires SSHA installed as a JAR. Download updates manually from GitHub Releases.")
+            return
+        }
+        pendingUpdate = null
+        updateCheckInProgress = true
+        notify("§7Checking the latest stable SSHA release…")
+        setUpdateConnectionTimeouts()
+        val future = runCatching { context.checkUpdate("full").orTimeout(20, TimeUnit.SECONDS) }.getOrElse { failure ->
+            updateCheckInProgress = false
+            logger.warn("SSHA update check failed to start", failure)
+            notify("§cSSHA update check could not start. You can download releases manually from GitHub.")
+            return
+        }
+        future.whenComplete { update, error -> Minecraft.getInstance().execute {
+            updateCheckInProgress = false
+            if (error != null) {
+                logger.warn("SSHA update check failed", error)
+                notify("§cSSHA update check failed. You can download releases manually from GitHub.")
+                return@execute
+            }
+            if (update == null || !update.isUpdateAvailable) {
+                pendingUpdate = null
+                notify("§aSSHA is up to date, or no verified stable JAR release is available.")
+                return@execute
+            }
+            pendingUpdate = update
+            ChatUtils.clickableChat(
+                "§eSSHA ${update.update.versionName} is available. Click here to install it.",
+                onClick = ::installAvailableUpdate,
+                hover = "§eDownload and verify the release; restart Minecraft manually to finish installation.",
+            )
+            ChatUtils.chat("§eOr choose About → Install Update in your settings menu.")
+        } }
+    }
+
+    private fun installAvailableUpdate() {
+        val update = pendingUpdate
+        if (updateInstallInProgress) {
+            notify("§eSSHA update installation is already running.")
+            return
+        }
+        if (update == null || !update.isUpdateAvailable) {
+            notify("§eCheck for updates first. Install Update is enabled only after a newer stable release is found.")
+            return
+        }
+        if (!isNewerRelease(update.update.versionNumber?.asString ?: "", installedVersion())) {
+            pendingUpdate = null
+            notify("§eThat release is no longer newer. Check for updates again.")
+            return
+        }
+        updateInstallInProgress = true
+        notify("§7Downloading and verifying SSHA ${update.update.versionName}…")
+        setUpdateConnectionTimeouts()
+        val installFuture = runCatching { update.launchUpdate() }.getOrElse { failure ->
+            updateInstallInProgress = false
+            logger.warn("SSHA update install failed to start", failure)
+            notify("§cSSHA update could not be installed. The current version remains active; try the GitHub release page.")
+            return
+        }
+        installFuture.whenComplete { _, error -> Minecraft.getInstance().execute {
+            updateInstallInProgress = false
+            if (error != null) {
+                logger.warn("SSHA update install failed", error)
+                notify("§cSSHA update could not be installed. The current version remains active; try the GitHub release page.")
+            } else {
+                pendingUpdate = null
+                notify("§aSSHA update downloaded and verified. Exit Minecraft to install it, then relaunch from your launcher.")
+            }
+        } }
+    }
+
+    private fun updateContext(): UpdateContext? {
+        val location = runCatching { HotmAddon::class.java.protectionDomain?.codeSource?.location?.toURI() }.getOrNull()
+            ?: return null
+        val installedJar = runCatching { File(location) }.getOrNull()?.takeIf {
+            it.isFile && it.extension.equals("jar", ignoreCase = true)
+        } ?: return null
+        val target = UpdateTarget.deleteAndSaveInTheSameFolder(HotmAddon::class.java)
+        if ((target as? moe.nea.libautoupdate.DeleteAndSaveInSameFolderUpdateTarget)?.file != installedJar) return null
+        return UpdateContext(
+            SshaReleaseUpdateSource(),
+            target,
+            object : CurrentVersion {
+            private val installed = releaseVersion(installedVersion())
+            override fun display(): String = installedVersion()
+            override fun isOlderThan(element: com.google.gson.JsonElement?): Boolean {
+                val latest = element?.takeIf { it.isJsonPrimitive }?.asString ?: return false
+                val current = installed?.joinToString(".") ?: return false
+                return isNewerRelease(latest, current)
+            }
+            },
+            "ssha_hotm_addon",
+        )
+    }
+
+    private fun notify(message: String) {
+        ChatUtils.chat(message)
+    }
+
+    private fun showPickaxeReset() {
+        TitleManager.sendTitle<PickaxeTitle>("Pickaxe Ability Reset", duration = 3.seconds)
+    }
+
     private fun menuItems(screen: AbstractContainerScreen<*>): List<Pair<String, List<String>>> =
         screen.menu.slots.asSequence()
             .map { it.item }
@@ -130,22 +278,23 @@ class HotmAddon : ClientModInitializer {
             .toList()
 
     private fun onGameMessage(message: String) {
-        val now = nowMillis()
-        val data = AddonSettings.data
-        val completion = data.rateEnabled && MiningArea.current() && rateTracker.completionMessage(message, now)
-        if (completion) xpRateTracker.completion(now)
         val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*>
-        val claiming = screen?.title?.string?.contains("Commissions", true) == true ||
-            message.replace(Regex("§."), "").contains("Visit the King to claim your rewards", true)
+        receiveHotmMessage(message, nowMillis(), AddonSettings.data,
+            screen?.title?.string?.contains("Commissions", true) == true, MiningArea.current(), AddonSettings::save)
+    }
+
+    internal fun receiveHotmMessage(message: String, now: Long, data: AddonSettingsData,
+        claiming: Boolean, inMiningArea: Boolean, save: () -> Unit) {
+        val completion = data.rateEnabled && inMiningArea && rateTracker.completionMessage(message, now)
+        if (completion) xpRateTracker.completion(now)
+        xpRateTracker.tick(now, data.rateEnabled && inMiningArea)
         if (xpRateTracker.chat(
                 message, now, data.commissionXp, claiming = claiming,
-                activeEvent = at.hannibal2.skyhanni.data.MiningEventsApi.getActiveEvent() != null,
             )) {
             xpRateTracker.lastReward?.let { reward ->
                 if (!data.manualProgress) {
                     data.applyLiveReward(reward)
-                    xpRateTracker.applyLiveRewardToBaseline(reward.xp)
-                    AddonSettings.save()
+                    save()
                 }
                 rateTracker.rewardActivity(now, completion)
             }
@@ -153,8 +302,8 @@ class HotmAddon : ClientModInitializer {
     }
 
     private fun applyObservation(observation: HotmProgress.Observation) {
-        if (!AddonSettings.data.manualProgress) xpRateTracker.observation(observation, nowMillis())
-        if (AddonSettings.data.applyAutomaticObservation(observation, System.currentTimeMillis())) AddonSettings.save()
+        val reconciled = if (!AddonSettings.data.manualProgress) xpRateTracker.observation(observation, nowMillis()) else observation
+        if (AddonSettings.data.applyAutomaticObservation(reconciled, System.currentTimeMillis())) AddonSettings.save()
     }
 
     internal fun createCommand(
@@ -328,7 +477,6 @@ class HotmAddon : ClientModInitializer {
 }
 
 internal data class AddonSettingsData(
-    var updateStream: UpdateStream = UpdateStream.RELEASES,
     var progressFormatVersion: Int = 0,
     var manualProgress: Boolean = false,
     var commissionXp: Long = 750L,
@@ -336,6 +484,7 @@ internal data class AddonSettingsData(
     var rateEnabled: Boolean = true,
     var smoothRates: Boolean = true,
     var commissionEta: Boolean = false,
+    var pickaxeResetTitle: Boolean = false,
     var hudPosition: HudPositionData = HudPositionData(),
     var grinding: GrindingSettingsData = GrindingSettingsData(),
     var powder: PowderSettingsData = PowderSettingsData(),
@@ -387,7 +536,9 @@ internal data class AddonSettingsData(
     }
 
     fun prepareAfterLoad() {
-        GrindingMaterial.entries.forEach { material -> grinding[material].compactAt = grinding[material].compactAt.coerceIn(1L, 1_000_000_000_000L) }
+        GrindingMaterial.entries.forEach { material ->
+            grinding[material].compactAt = grinding[material].compactAt.coerceIn(1L, 1_000_000_000_000L)
+        }
         if (eventAttributionVersion < 1) { extraEventXp = 0L; eventAttributionVersion = 1 }
         commissionXp = commissionXp.coerceAtLeast(1L)
         pendingCommissionCompletions = pendingCommissionCompletions.coerceIn(0, 100)

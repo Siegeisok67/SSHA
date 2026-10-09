@@ -40,9 +40,9 @@ internal object HotmHudDisplay {
             val state = if (rate.isPaused(now)) " §8(Paused)" else ""
             row(" §fAvg. Commissions/h: §a$value$state")
             if (xpRate != null) {
-                val xpValue = xpRate.average(rate.activeMillis, rate.observedWork, settings.commissionXp, settings.smoothRates)
+                val xpValue = xpRate.average(settings.smoothRates)
                     ?.let { String.format(Locale.US, "%,.0f", it) } ?: "Collecting…"
-                val estimate = if (xpRate.hasObservedXp) " §8(Observed)" else " §8(Est.)"
+                val estimate = " §8(Measured)"
                 row(" §fAvg. HOTM XP/h: §b$xpValue$estimate")
                 if (xpRate.dailyBonuses > 0) row(" §fDaily bonuses seen: §e${xpRate.dailyBonuses}/4 §8(est.)")
             }

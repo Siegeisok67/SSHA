@@ -57,6 +57,18 @@ class AddonConfigMenuTest {
     }
 
     @Test
+    fun `about update buttons use the injected stable check and install actions`() {
+        var checks = 0
+        var installs = 0
+        val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {},
+            checkForUpdates = { checks++ }, installAvailableUpdate = { installs++ })
+        config.about.updates.run()
+        config.about.installUpdate.run()
+        assertEquals(1, checks)
+        assertEquals(1, installs)
+    }
+
+    @Test
     fun `invalid menu inputs do not save or change settings`() {
         val settings = AddonSettingsData()
         settings.setManualProgress(6, 12_000L)
@@ -83,7 +95,7 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
-        listOf("version", "stream", "updates", "source", "issues").forEach { field ->
+        listOf("version", "updates", "installUpdate", "source", "issues").forEach { field ->
             val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
             assertNotNull(option, "About $field")
             assertNotNull(checkNotNull(option).editor)
@@ -91,8 +103,7 @@ class AddonConfigMenuTest {
         listOf("enabled", "overflowWarning", "showStored", "showSession", "smoothRate", "move").forEach { field ->
             assertNotNull(processor.getOptionFromField(GrindingWidgetMenuConfig::class.java.getField(field)), field)
         }
-        config.about.stream.set(UpdateStream.ALL)
-        assertEquals(UpdateStream.ALL, config.about.stream.get())
+        assertNull(AboutMenuConfig::class.java.fields.firstOrNull { it.name == "stream" })
         listOf("enabled", "rateEnabled", "tier", "earnedXp", "commissionXp", "applyReward", "applyManual", "move", "recheck", "resetAll", "resetRate", "resetEvents", "resetPosition").forEach { field ->
             val option = processor.getOptionFromField(WidgetMenuConfig::class.java.getField(field))
             assertNotNull(option, field)

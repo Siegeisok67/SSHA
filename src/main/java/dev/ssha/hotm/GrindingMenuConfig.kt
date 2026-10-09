@@ -44,13 +44,15 @@ class PowderWidgetMenuConfig internal constructor(
     })
     @Expose @JvmField @ConfigOption(name = "Enabled", desc = "Off by default. Track actual SkyHanni mithril powder gain events while in the Dwarven Mines; spending/refunds are not gains.") @ConfigEditorBoolean
     val enabled = bound({ settings.enabled }, { settings.enabled = it }, save)
+    @Expose @JvmField @ConfigOption(name = "Include Commission Powder", desc = "Off by default. Include explicitly identified commission powder rewards in session powder and powder/hour. Mining and reward-event powder remain tracked.") @ConfigEditorBoolean
+    val includeCommissionPowder = bound({ settings.includeCommissionPowder }, { settings.includeCommissionPowder = it }, save)
     @Expose @JvmField @ConfigOption(name = "Smooth Rate", desc = "Smooth hourly rates after 60 seconds of active time; idle pauses after 20 seconds.") @ConfigEditorBoolean
     val smoothRate = bound({ settings.smoothRate }, { settings.smoothRate = it }, save)
     @Expose @JvmField @ConfigOption(name = "Show Bazaar Value", desc = "Gross instant-sell estimate for compacted enchanted materials and observed event drops, before tax/costs. Missing prices are marked partial; powder has no coin value.") @ConfigEditorBoolean
     val showProfit = bound({ settings.showProfit }, { settings.showProfit = it }, save)
     @Expose @JvmField @ConfigOption(name = "Show Materials", desc = "Show session raw-equivalent mithril and titanium gains.") @ConfigEditorBoolean
     val showMaterials = bound({ settings.showMaterials }, { settings.showMaterials = it }, save)
-    @Expose @JvmField @ConfigOption(name = "Show Events", desc = "Show the current mining event and actual powder gained during events. Double Powder is already included in actual gains.") @ConfigEditorBoolean
+    @Expose @JvmField @ConfigOption(name = "Show Events", desc = "Show Goblin Raid, Raffle, Mithril Gourmand rewards and powder during 2x Powder. Better Together/Gone with the Wind do not classify mining gains as event rewards.") @ConfigEditorBoolean
     val showEvents = bound({ settings.showEvents }, { settings.showEvents = it }, save)
     @JvmField @ConfigOption(name = "Move Widget", desc = "Move and resize this separate widget.") @ConfigEditorButton(buttonText = "Move")
     val move = Runnable { move() }

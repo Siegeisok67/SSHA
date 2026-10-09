@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'dev.ssha'
-version = '1.1.0'
+version = '1.1.1'
 
 base {
     archivesName = 'ssha'
@@ -27,6 +27,11 @@ loom {
 }
 
 repositories {
+    maven {
+        name = 'NEA Releases'
+        url = 'https://repo.nea.moe/releases'
+        content { includeGroup 'moe.nea' }
+    }
     exclusiveContent {
         forRepository {
             maven {
@@ -39,6 +44,8 @@ repositories {
 }
 
 dependencies {
+    implementation 'moe.nea:libautoupdate:1.3.1'
+    include 'moe.nea:libautoupdate:1.3.1'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.14.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     minecraft 'com.mojang:minecraft:26.2'
@@ -68,16 +75,6 @@ processResources {
 
 tasks.withType(AbstractArchiveTask).configureEach {
     archiveFileName = "ssha_${project.version}${archiveClassifier.getOrElse('') ? '-' + archiveClassifier.get() : ''}.${archiveExtension.get()}"
-}
-
-tasks.register('releaseSource', Zip) {
-    archiveFileName = "ssha_${project.version}-source.zip"
-    destinationDirectory = layout.buildDirectory.dir('release')
-    into("ssha_${project.version}") {
-        from('src') { into 'src' }
-        from('gradle') { into 'gradle' }
-        from('README.md', 'RELEASE_NOTES.md', 'build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', '.gitignore', '.gitattributes')
-    }
 }
 
 tasks.withType(Test).configureEach {

@@ -42,11 +42,14 @@ class HotmXpRateTrackerTest {
     }
 
     @Test
-    fun `mining event residual beyond configured commission reward is counted separately`() {
+    fun `only explicit reward context attributes event XP`() {
         val tracker = HotmXpRateTracker()
-        assertTrue(tracker.chat("+950 HOTM Experience", 1_000L, 750L, today, activeEvent = true))
-        assertTrue(tracker.lastReward!!.commission)
-        assertEquals(200L, tracker.lastReward!!.eventXp)
+        tracker.chat("RAFFLE ENDED!", 900L, 750L, today)
+        assertTrue(tracker.chat("+950 HOTM Experience", 1_000L, 750L, today))
+        assertFalse(tracker.lastReward!!.commission)
+        assertEquals(950L, tracker.lastReward!!.eventXp)
+        assertTrue(tracker.chat("+750 HOTM Experience", 10_000L, 750L, today))
+        assertFalse(tracker.lastReward!!.event)
     }
 
     @Test

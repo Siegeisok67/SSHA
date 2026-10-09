@@ -32,10 +32,12 @@ internal object AddonConfigMenu {
         movePowder: () -> Unit,
         resetPowderPosition: () -> Unit,
         resetPowder: () -> Unit,
+        checkForUpdates: () -> Unit,
+        installAvailableUpdate: () -> Unit,
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
             { message -> ChatUtils.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder)
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, installAvailableUpdate)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -56,10 +58,15 @@ class AddonMenuConfig internal constructor(
     movePowder: () -> Unit = {},
     resetPowderPosition: () -> Unit = {},
     resetPowder: () -> Unit = {},
+    checkForUpdates: () -> Unit = {},
+    installAvailableUpdate: () -> Unit = {},
 ) : Config() {
     @Expose @JvmField
-    @Category(name = "About", desc = "SSHA version, update stream, credits and project links.")
-    val about = AboutMenuConfig(settings, save)
+    @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
+    val about = AboutMenuConfig().apply {
+        setUpdateAction(checkForUpdates)
+        setInstallAction(installAvailableUpdate)
+    }
 
     @Expose @JvmField
     @Category(name = "Mining", desc = "Siege's SkyHanni Addons — HOTM and commissions")
@@ -108,7 +115,12 @@ class WidgetMenuConfig internal constructor(
     val enabled: Property<Boolean> = bound({ settings.hudEnabled }, { settings.hudEnabled = it })
 
     @Expose @JvmField
-    @ConfigOption(name = "Hourly Averages", desc = "Use partial commission progress and observed HOTM XP over active time. Pauses after 20 seconds without commission progress. Rates need 60 seconds of active time; session statistics reset on restart.")
+    @ConfigOption(name = "Pickaxe Ability Reset Title", desc = "Off by default. Show Pickaxe Ability Reset when the server cooldown changes to Available/Ready or explicitly resets it. Reads your actual remaining cooldown; never assumes a fixed duration or announces readiness from an estimated timer alone.")
+    @ConfigEditorBoolean
+    val pickaxeResetTitle: Property<Boolean> = bound({ settings.pickaxeResetTitle }, { settings.pickaxeResetTitle = it })
+
+    @Expose @JvmField
+    @ConfigOption(name = "Hourly Averages", desc = "Commissions/h uses partial progress and pauses after 20 seconds idle. HOTM XP/h measures actual received XP over eligible mining session time, including travel/claim/idle time to avoid inflated rates. XP timing starts on progress, first reward or /hotm capture; requires 60 seconds. Leaving mining/disconnecting excludes time.")
     @ConfigEditorBoolean
     val rateEnabled: Property<Boolean> = bound({ settings.rateEnabled }, { settings.rateEnabled = it })
 

@@ -5,7 +5,6 @@ import at.hannibal2.skyhanni.data.IslandType
 import at.hannibal2.skyhanni.data.ProfileStorageData
 import at.hannibal2.skyhanni.utils.InventoryUtils
 import at.hannibal2.skyhanni.data.MiningEventsApi
-import at.hannibal2.skyhanni.events.chat.SkyHanniChatEvent
 import at.hannibal2.skyhanni.events.mining.PowderEvent
 import at.hannibal2.skyhanni.features.inventory.bazaar.BazaarApi.getBazaarData
 import at.hannibal2.skyhanni.utils.NeuInternalName.Companion.toInternalName
@@ -38,7 +37,6 @@ internal class GrindingIntegration(
     private val save: () -> Unit,
     private val now: () -> Long,
     private val resetHotmSession: () -> Unit,
-    private val gameMessage: (String) -> Unit,
 ) {
     private val trackers = GrindingMaterial.entries.associateWith(::GrindingTracker)
     private val widgets = GrindingMaterial.entries.associateWith { material ->
@@ -51,6 +49,7 @@ internal class GrindingIntegration(
     private val sacks = SackSnapshot()
     private val craftedProducts = mutableMapOf<GrindingMaterial, Long>()
     private val powderTracker = MithrilPowderTracker()
+    private val powderAccounting = PowderAccounting()
     private val powderWidget = HotmHudIntegration(settings, save, ::powderLines,
         enabled = { settings().powder.enabled && powderArea() }, editorEnabled = { settings().powder.enabled }, storedPosition = { settings().powder.position },
         widgetName = "SSHA Mithril Powder Grinding", compactTitle = "Mithril Powder")
@@ -82,6 +81,7 @@ internal class GrindingIntegration(
         if (SkyBlockUtils.currentIsland != lastIsland) {
             trackers.values.forEach { it.suspend(time) }
             powderTracker.suspend(time)
+            powderAccounting.reset()
             lastIsland = SkyBlockUtils.currentIsland
             lastSnapshotAt = Long.MIN_VALUE
             lastWarningSnapshotAt = Long.MIN_VALUE
@@ -94,6 +94,7 @@ internal class GrindingIntegration(
             trackers.values.forEach { it.reset() }
             popupAt.clear()
             powderTracker.reset()
+        powderAccounting.reset()
         }
         profileReadyPrevious = profileReady
         val amounts = if (snapshot && profileReady) SackApi.sackData.entries.associate { (id, item) ->
@@ -130,8 +131,11 @@ internal class GrindingIntegration(
             checkNotNull(widgets[material]).tick(minecraft)
         }
         val trackPowder = active && (settings().powder.enabled || settings().grinding.mithril.enabled || settings().grinding.titanium.enabled) && powderArea()
-        if (powderEnabled && !trackPowder) powderTracker.suspend(time)
-        if (trackPowder) powderTracker.tick(time)
+        if (powderEnabled && !trackPowder) { powderTracker.suspend(time); powderAccounting.reset() }
+        if (trackPowder) {
+            powderAccounting.drain(time, settings().powder.includeCommissionPowder) { gain, at -> powderTracker.gainPowder(gain, at) }
+            powderTracker.tick(time)
+        }
         powderEnabled = trackPowder
         powderWidget.tick(minecraft)
         inSkyblock = active
@@ -195,6 +199,7 @@ internal class GrindingIntegration(
         popupAt.clear()
         sacks.clear(); craftedProducts.clear()
         powderTracker.reset()
+        powderAccounting.reset()
         profileReadyPrevious = false
         lastSnapshotAt = Long.MIN_VALUE
         lastWarningSnapshotAt = Long.MIN_VALUE
@@ -207,16 +212,17 @@ internal class GrindingIntegration(
         popupAt.clear()
         sacks.clear(); craftedProducts.clear()
         powderTracker.reset()
+        powderAccounting.reset()
         profileReadyPrevious = true
         lastSnapshotAt = Long.MIN_VALUE
         lastWarningSnapshotAt = Long.MIN_VALUE
     }
 
-    @HandleEvent(onlyOnSkyblock = true)
-    fun onChat(event: SkyHanniChatEvent.Allow) {
-        val text = event.cleanMessage
-        gameMessage(text)
-        powderTracker.eventMessage(text, now())
+    fun onGameMessage(text: String) {
+        if (!SkyBlockUtils.inSkyBlock) return
+        val screen = Minecraft.getInstance().gui.screen() as? net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<*>
+        if (screen?.title?.string?.contains("Commissions", true) == true) powderAccounting.claiming(now())
+        powderAccounting.message(text, now())
         Regex("^You Supercrafted (.+?)(?: x([0-9][0-9,]*))?!$").matchEntire(text.trim())?.let { match ->
             val name = match.groupValues[1].trim()
             val material = GrindingMaterial.entries.firstOrNull { it.productId.replace('_', ' ').equals(name, true) }
@@ -246,13 +252,15 @@ internal class GrindingIntegration(
     fun onPowderGain(event: PowderEvent.Gain) {
         if (settings().powder.enabled && powderArea() && event.powder == HotmApi.PowderType.MITHRIL) {
             // API reports the actual gain, including buffs: never multiply 2x powder again.
-            powderTracker.gainPowder(event.amount, now(), MiningEventsApi.getActiveEvent() != null)
+            val screen = Minecraft.getInstance().gui.screen() as? net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<*>
+            if (screen?.title?.string?.contains("Commissions", true) == true) powderAccounting.claiming(now())
+            powderAccounting.delta(event.amount, now(), MiningEventsApi.getActiveEvent()?.type)
         }
     }
 
     @HandleEvent
     fun onMiningEventEnded(event: MiningEventEvent.Ended) {
-        powderTracker.eventMessage("${event.event.type.name.replace('_', ' ')} ENDED", now())
+        powderAccounting.eventEnded(event.event.type, now())
     }
 
     @HandleEvent
@@ -274,7 +282,7 @@ internal class GrindingIntegration(
 
     fun movePowder() = powderWidget.requestEditor()
     fun resetPowderPosition() = powderWidget.resetPosition(8, 500)
-    fun resetPowder() = powderTracker.reset()
+    fun resetPowder() { powderTracker.reset(); powderAccounting.reset() }
     fun render(graphics: GuiGraphicsExtractor) { widgets.values.forEach { it.render(graphics) }; powderWidget.render(graphics) }
 
     private fun powderArea(): Boolean = MiningArea.current()
@@ -288,7 +296,7 @@ internal class GrindingIntegration(
         row("§7Powder: §a${format(powderTracker.powder)} §8| §7${powderTracker.activeTime()}${if (powderTracker.paused(now())) " §8Ⅱ" else ""}")
         if (config.showMaterials) row("§7Mithril: §b${format(powderTracker.mithrilRaw)} §8| §7Titanium: §f${format(powderTracker.titaniumRaw)}")
         if (config.showEvents) {
-            val event = MiningEventsApi.getActiveEvent()?.type?.name?.replace('_', ' ') ?: "None"
+            val event = MiningEventsApi.getActiveEvent()?.type?.takeIf(PowderAccounting::relevant)?.name?.replace('_', ' ') ?: "None"
             row("§7Event: §e$event")
             row("§7Powder during events: §a${format(powderTracker.powderDuringEvents)}")
         }
