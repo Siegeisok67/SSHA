@@ -91,6 +91,28 @@ class LiveMiningTrackingTest {
     }
 
     @Test
+    fun `pickaxe ready uses the real Hypixel availability message once per use`() {
+        val tracker = PickaxeResetTracker()
+        assertFalse(tracker.message("You used your Mining Speed Boost Pickaxe Ability!", 0L))
+        assertTrue(tracker.message("Mining Speed Boost is now available!", 120_000L))
+        assertFalse(tracker.message("Mining Speed Boost is now available!", 120_500L))
+        assertFalse(tracker.message("Mining Speed Boost has expired!", 121_000L))
+        assertFalse(tracker.message("You used your Pickobulus Pickaxe Ability!", 130_000L))
+        assertTrue(tracker.message("Pickobulus is now available!", 250_000L))
+    }
+
+    @Test
+    fun `pickaxe ready banner is one-shot, green-sized and expires`() {
+        val banner = PickaxeReadyBanner(durationMs = 3_000L)
+        assertFalse(banner.visible(0L))
+        banner.show(1_000L)
+        assertTrue(banner.visible(3_999L))
+        banner.show(2_000L)
+        assertFalse(banner.visible(4_000L))
+        assertEquals("Pickaxe Ability Ready", PickaxeReadyBanner.TEXT)
+    }
+
+    @Test
     fun `live server reward changes HUD XP and commissions left without menu capture`() {
         val settings = AddonSettingsData(hotmTier = 6, xpToNextTier = 138_000L)
         val addon = HotmAddon()

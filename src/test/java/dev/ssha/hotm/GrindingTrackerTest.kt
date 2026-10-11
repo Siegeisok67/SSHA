@@ -55,6 +55,17 @@ class GrindingTrackerTest {
     }
 
     @Test
+    fun `compact popups name the enchanted target of each material`() {
+        assertEquals("Compact to Enchanted Mithril", GrindingMaterial.MITHRIL.popupText)
+        assertEquals("Compact to Enchanted Gold Block", GrindingMaterial.GOLD.popupText)
+        assertEquals("Compact to Enchanted Diamond Block", GrindingMaterial.DIAMOND.popupText)
+        assertEquals("Compact to Enchanted Titanium", GrindingMaterial.TITANIUM.popupText)
+        assertEquals("Compact to Enchanted Umber", GrindingMaterial.UMBER.popupText)
+        assertEquals("Compact to Enchanted Tungsten", GrindingMaterial.TUNGSTEN.popupText)
+        assertEquals("Forge Bejewled Handles", GrindingMaterial.JEWELS.popupText)
+    }
+
+    @Test
     fun `compact popup is default off only on fresh threshold crossing and rearms`() {
         val tracker = GrindingTracker(GrindingMaterial.GOLD)
         val options = GrindingWidgetSettings(enabled = true, compactAt = 20_160L)

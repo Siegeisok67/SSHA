@@ -36,7 +36,8 @@ internal class PickaxeResetTracker {
                 readyAt = null
             }
         }
-        if (Regex("(?i)^Your (?:Pickaxe Ability|(?:Mining Speed Boost|Pickobulus|Gemstone Infusion|Maniac Miner|Vein Seeker)(?: Pickaxe Ability)?) (?:is (?:now )?(?:available|ready)|(?:has been |was )reset)[!.]$").matches(text)) {
+        // Hypixel sends readiness as "Mining Speed Boost is now available!" (no "Your" or "Pickaxe Ability" wrapper).
+        if (Regex("(?i)^(?:Your )?(?:(?:Mining Speed Boost|Pickobulus|Gemstone Infusion|Maniac Miner|Vein Seeker)(?: Pickaxe Ability)?|Pickaxe Ability) (?:is (?:now )?(?:available|ready)|(?:has been |was )reset)[!.]$").matches(text)) {
             return ready(now)
         }
         return false

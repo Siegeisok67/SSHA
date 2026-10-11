@@ -1,10 +1,8 @@
 package dev.ssha.hotm
 
-import at.hannibal2.skyhanni.data.title.TitleManager
 import at.hannibal2.skyhanni.data.model.TabWidget
 import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
-import kotlin.time.Duration.Companion.seconds
 import com.google.gson.GsonBuilder
 import com.mojang.brigadier.arguments.BoolArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -41,7 +39,9 @@ class HotmAddon : ClientModInitializer {
     private val rateTracker = CommissionRateTracker()
     private val xpRateTracker = HotmXpRateTracker()
     private val pickaxeResetTracker = PickaxeResetTracker()
-    private enum class PickaxeTitle { RESET }
+    private val autoRefresh = AutoHotmRefresh()
+    private val pickaxeBanner = PickaxeReadyBanner()
+    private var commissionsScreenOpen = false
     private var settingsRequested = false
     private val logger = LoggerFactory.getLogger("SSHA Update")
     private var pendingUpdate: PotentialUpdate? = null
@@ -103,7 +103,7 @@ class HotmAddon : ClientModInitializer {
         HudElementRegistry.attachElementBefore(
             VanillaHudElements.CHAT,
             Identifier.fromNamespaceAndPath("ssha_hotm_addon", "hotm_tracker"),
-            { graphics, _ -> hudIntegration.render(graphics); grindingIntegration.render(graphics) },
+            { graphics, _ -> hudIntegration.render(graphics); grindingIntegration.render(graphics); pickaxeBanner.render(graphics, nowMillis()) },
         )
     }
 
@@ -153,9 +153,21 @@ class HotmAddon : ClientModInitializer {
             AddonSettings.save()
         }
 
-        val screen = minecraft.gui.screen() as? AbstractContainerScreen<*> ?: return
-        if (!HotmProgress.isHotmInventoryTitle(screen.title.string)) return
-        recordMenu(menuItems(screen))?.let(::applyObservation)
+        val container = minecraft.gui.screen() as? AbstractContainerScreen<*>
+        // Commission claims happen in the King's menu; re-read /hotm once that menu closes.
+        val commissionsOpen = container?.title?.string?.contains("Commissions", true) == true
+        if (commissionsScreenOpen && !commissionsOpen) autoRefresh.request(now, 1_000L)
+        commissionsScreenOpen = commissionsOpen
+        autoRefresh.expire(now)
+        if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null) && SkyBlockUtils.inSkyBlock) {
+            minecraft.player?.connection?.sendCommand("hotm")
+        }
+
+        val menu = container ?: return
+        if (!HotmProgress.isHotmInventoryTitle(menu.title.string)) return
+        val observation = recordMenu(menuItems(menu))?.also(::applyObservation)
+        // Close only the menu our silent read opened; a menu the player opened stays open.
+        if (autoRefresh.menuOpened(now, observation?.xpToNextTier != null)) minecraft.player?.closeContainer()
     }
 
     private fun checkForUpdates() {
@@ -265,7 +277,7 @@ class HotmAddon : ClientModInitializer {
     }
 
     private fun showPickaxeReset() {
-        TitleManager.sendTitle<PickaxeTitle>("Pickaxe Ability Reset", duration = 3.seconds)
+        pickaxeBanner.show(nowMillis())
     }
 
     private fun menuItems(screen: AbstractContainerScreen<*>): List<Pair<String, List<String>>> =
@@ -281,6 +293,8 @@ class HotmAddon : ClientModInitializer {
         val screen = Minecraft.getInstance().gui.screen() as? AbstractContainerScreen<*>
         receiveHotmMessage(message, nowMillis(), AddonSettings.data,
             screen?.title?.string?.contains("Commissions", true) == true, MiningArea.current(), AddonSettings::save)
+        // Live reward chat is applied immediately; a silent menu read then reconciles the exact total.
+        if (AutoHotmRefresh.isRewardMessage(message)) autoRefresh.request(nowMillis(), 1_500L)
     }
 
     internal fun receiveHotmMessage(message: String, now: Long, data: AddonSettingsData,
@@ -311,6 +325,7 @@ class HotmAddon : ClientModInitializer {
         saveSettings: () -> Unit = { AddonSettings.save() },
         openGui: () -> Unit = { hudIntegration.requestEditor() },
         openSettings: () -> Unit = { settingsRequested = true },
+        readHotm: () -> Unit = { autoRefresh.request(nowMillis(), 0L) },
     ): LiteralArgumentBuilder<FabricClientCommandSource> {
         val command = LiteralArgumentBuilder.literal<FabricClientCommandSource>("ssha")
         command.executes {
@@ -369,7 +384,8 @@ class HotmAddon : ClientModInitializer {
                 .executes { context ->
                     settings().resumeAutomaticProgress()
                     saveSettings()
-                    context.source.sendFeedback(Component.literal("§aAutomatic capture enabled. Open /hotm; tier progress is read without hovering."))
+                    readHotm()
+                    context.source.sendFeedback(Component.literal("§aAutomatic capture enabled. Reading /hotm now; the menu opens and closes by itself."))
                     1
                 },
         )

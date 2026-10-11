@@ -115,7 +115,7 @@ class WidgetMenuConfig internal constructor(
     val enabled: Property<Boolean> = bound({ settings.hudEnabled }, { settings.hudEnabled = it })
 
     @Expose @JvmField
-    @ConfigOption(name = "Pickaxe Ability Reset Title", desc = "Off by default. Show Pickaxe Ability Reset when the server cooldown changes to Available/Ready or explicitly resets it. Reads your actual remaining cooldown; never assumes a fixed duration or announces readiness from an estimated timer alone.")
+    @ConfigOption(name = "Pickaxe Ability Ready Banner", desc = "Off by default. Show a small green Pickaxe Ability Ready banner once when the server reports the ability is available again or resets it. Reads your actual remaining cooldown; never assumes a fixed duration or announces readiness from an estimated timer alone.")
     @ConfigEditorBoolean
     val pickaxeResetTitle: Property<Boolean> = bound({ settings.pickaxeResetTitle }, { settings.pickaxeResetTitle = it })
 

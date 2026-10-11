@@ -25,10 +25,19 @@ internal enum class GrindingMaterial(
         JEWELS -> "BEJEWELED_HANDLE"
         else -> productId
     }
+    /** What this material is compacted into, shown in the popup. */
+    val compactTarget: String get() = when (this) {
+        GOLD -> "Enchanted Gold Block"
+        DIAMOND -> "Enchanted Diamond Block"
+        MITHRIL -> "Enchanted Mithril"
+        TITANIUM -> "Enchanted Titanium"
+        UMBER -> "Enchanted Umber"
+        TUNGSTEN -> "Enchanted Tungsten"
+        JEWELS -> "Bejeweled Handle"
+    }
     val popupText: String get() = when (this) {
-        GOLD, DIAMOND -> "Compact to blocks!"
-        JEWELS -> "Craft Bejeweled Handles"
-        else -> "Refine materials"
+        JEWELS -> "Forge Bejewled Handles"
+        else -> "Compact to $compactTarget"
     }
     fun weight(id: String): Long = when (id) {
         rawId -> 1L
