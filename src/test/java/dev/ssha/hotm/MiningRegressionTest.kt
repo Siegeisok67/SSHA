@@ -32,16 +32,27 @@ class MiningRegressionTest {
     @Test
     fun `fresh sack lore beats cached api values and api covers missing lore`() {
         // A just-opened sack is ground truth; a stale cached API value must not shadow it.
-        assertEquals(5_000L, GrindingIntegration.resolveStoredAmount(5_000L, 3_000L))
-        assertEquals(3_000L, GrindingIntegration.resolveStoredAmount(null, 3_000L))
-        assertNull(GrindingIntegration.resolveStoredAmount(null, null))
+        assertEquals(5_000L, GrindingIntegration.resolveStoredAmount(5_000L, 1_000L, 3_000L, 2_000L))
+        assertEquals(3_000L, GrindingIntegration.resolveStoredAmount(null, Long.MIN_VALUE, 3_000L, 2_000L))
+        assertNull(GrindingIntegration.resolveStoredAmount(null, Long.MIN_VALUE, null, 2_000L))
         val tracker = GrindingTracker(GrindingMaterial.MITHRIL)
         tracker.stored(
-            GrindingIntegration.resolveStoredAmount(5_000L, 3_000L),
-            GrindingIntegration.resolveStoredAmount(null, 320L),
-            GrindingIntegration.resolveStoredAmount(null, null),
+            GrindingIntegration.resolveStoredAmount(5_000L, 1_000L, 3_000L, 2_000L),
+            GrindingIntegration.resolveStoredAmount(null, Long.MIN_VALUE, 320L, 2_000L),
+            GrindingIntegration.resolveStoredAmount(null, Long.MIN_VALUE, null, 2_000L),
         )
         assertEquals(5_000L + 320L * 160L, tracker.storedRaw)
+    }
+
+    @Test
+    fun `stale sack lore yields to the live api instead of shadowing it forever`() {
+        // Lore read at t=0 is stale ten minutes later: the live API (21) must win over 233,301.
+        assertEquals(21L, GrindingIntegration.resolveStoredAmount(233_301L, 0L, 21L, 10 * 60_000L))
+        // Unknown lore age keeps the lore-wins fallback; every real open is timestamped.
+        assertEquals(233_301L, GrindingIntegration.resolveStoredAmount(233_301L, Long.MIN_VALUE, 21L, 1_000L))
+        // Without an API value, even stale lore still covers wiped or never-opened sacks.
+        assertEquals(233_301L, GrindingIntegration.resolveStoredAmount(233_301L, 0L, null, 10 * 60_000L))
+        assertEquals(5_000L, GrindingIntegration.resolveStoredAmount(5_000L, 0L, 3_000L, GrindingIntegration.LORE_FRESH_MS))
     }
 
     @Test

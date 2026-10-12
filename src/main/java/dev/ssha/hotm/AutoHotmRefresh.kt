@@ -61,6 +61,12 @@ internal class AutoHotmRefresh(
     /** True while a read we sent is still waiting for its menu. */
     fun awaitingMenu(): Boolean = awaitingSince != null
 
+    /** True when /hotm was sent within [windowMs]: a visible menu this fresh is ours, not the player's. */
+    fun sentWithin(now: Long, windowMs: Long): Boolean {
+        val last = lastSentAt ?: return false
+        return now - last in 0L..windowMs
+    }
+
     /** Stop waiting for a menu that never opened. */
     fun expire(now: Long) {
         val since = awaitingSince ?: return

@@ -95,14 +95,37 @@ object HotmProgress {
     private fun itemTier(name: String): Int? = tierItemPattern.matchEntire(name.cleanText())
         ?.groupValues?.get(1)?.toTierOrNull()
 
+    private val tierWordPattern = Regex("(?i)\\b(?:TIER|LEVEL)\\b")
+
+    internal fun isTierSelectorRow(name: String): Boolean {
+        val clean = name.cleanText()
+        if (itemTier(clean) == null) return false
+        if (clean.startsWith("TIER", ignoreCase = true) || clean.startsWith("HOTM", ignoreCase = true)) return true
+        return tierWordPattern.containsMatchIn(clean)
+    }
+
     fun readMenuObservation(items: List<Pair<String, List<String>>>): Observation? {
         val highestUnlockedTier = items.mapNotNull { (name, lore) ->
             itemTier(name)?.takeIf { lore.any { it.cleanText().equals("UNLOCKED", ignoreCase = true) } }
         }.maxOrNull()
+        // Bare "Tier N" / "HOTM N" selector rows are tier ground truth. "Heart of the
+        // Mountain N" rows are perk-style entries, not selectors, and never anchor the tier.
+        val selectorUnlockedTier = items.mapNotNull { (name, lore) ->
+            itemTier(name)?.takeIf {
+                isTierSelectorRow(name) && lore.any { it.cleanText().equals("UNLOCKED", ignoreCase = true) }
+            }
+        }.maxOrNull()
         val observations = items.mapNotNull { (name, lore) ->
             val candidate = readItemObservation(name, lore) ?: return@mapNotNull null
             // Higher locked icons describe future goals, not the player's current tier.
-            if (highestUnlockedTier != null && itemTier(name) != null && candidate.tier != highestUnlockedTier) null else candidate
+            if (highestUnlockedTier != null && itemTier(name) != null && candidate.tier != highestUnlockedTier) null
+            // The summary item's own level line can read one high while a display buff
+            // (e.g. Blue Goblin Egg) is active. Selector rows are ground truth: keep the
+            // summary XP, but never let it outrank the unlocked selectors.
+            else if (selectorUnlockedTier != null && candidate.tier != null && candidate.tier != selectorUnlockedTier &&
+                name.cleanText().equals("Heart of the Mountain", ignoreCase = true)
+            ) candidate.copy(tier = selectorUnlockedTier)
+            else candidate
         }
         val complete = observations.filter { it.tier != null && it.xpToNextTier != null }.distinct()
         if (complete.size == 1) return complete.single()

@@ -1,3 +1,22 @@
+# SSHA 1.4.8 — Tier anchor, sack freshness, silent-read repairs, About/Extra menu
+
+- **Tier no longer flip-flops while browsing /hotm.** The summary item's level line is anchored to the unlocked `Tier N` / `HOTM N` selector rows (its XP is kept), so a display buff reading one high can't outrank row truth; hovers with no menu scan yet are ignored.
+- **Stored follows the live sack API again.** Opened sack lore is authoritative for 5 minutes, then yields to SkyHanni's live amounts, so an old open can never shadow current contents forever. `/ssha sacks` now shows raw, enchanted and product api+lore components per material.
+- **Silent reads actually turn the page.** A read that misses its claim gets the same right-click Next Page turn and close on the visible menu (only within 10s of our own `/hotm`, never yours), expired claims are dropped instead of jamming future reads, and empty menus wait for contents.
+- **About/Extra menu rework.** About holds the big version header, Release Notes and Feedback; Source Code moved to a new Extra section. Manually download and Changelog appear beside the new version only when an update exists, with Check for Updates below the text. Checks never auto-install; installs go through the chat prompt.
+
+## Release artifact
+
+`build/libs/ssha_1.4.8.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+In-game verification still pending: tier stability while browsing, the page-2 turn on a real Hypixel menu, header layout, and sack numbers against live packets. Skyblocker mixin compatibility is untested here.
+
+---
+
 # SSHA 1.4.7 — SkyHanni-style updates, login notices, SSHA chat sender
 
 - **Update section like SkyHanni's About page.** The About category shows an Update Status row (red installed `➔` green latest once checked), plus Check & Install Update, Show Changelog and Manually download buttons.

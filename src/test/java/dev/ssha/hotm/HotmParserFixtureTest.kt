@@ -2,6 +2,7 @@ package dev.ssha.hotm
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -153,6 +154,36 @@ class HotmParserFixtureTest {
         assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(6, 138_000L)))
         assertTrue(HotmProgress.readComplete(HotmProgress.Observation(6, 138_000L)))
         assertFalse(HotmProgress.readComplete(null))
+    }
+
+    @Test
+    fun `buff inflated summary level never outranks unlocked selector rows`() {
+        // Display buffs (e.g. Blue Goblin Egg) can push the summary Level line one high
+        // while the selector rows still show the true tier. Rows win; summary XP is kept.
+        val menu = (1..5).map { "Tier $it" to listOf("Rewards:", "UNLOCKED") } + listOf(
+            "Heart of the Mountain" to listOf("§7Level 6/10", "§b12,000 / 100,000 HOTM XP"),
+            "Tier 6" to listOf("Progress: 12%", "12,000/100k", "LOCKED"),
+        )
+        assertEquals(HotmProgress.Observation(5, 88_000L), HotmProgress.readMenuObservation(menu))
+        assertEquals(HotmProgress.Observation(5, 88_000L), HotmProgress.readMenuObservation(menu.reversed()))
+        // Without selector rows there is nothing to anchor against: the summary stands.
+        assertEquals(
+            HotmProgress.Observation(6, 138_000L),
+            HotmProgress.readMenuObservation(listOf(
+                "Heart of the Mountain" to listOf("§7Level 6/10", "§b12,000 / 150,000 HOTM XP"),
+                "Mining Speed" to listOf("Level 1/50"),
+            )),
+        )
+        assertTrue(HotmProgress.isTierSelectorRow("Tier 5"))
+        assertTrue(HotmProgress.isTierSelectorRow("HOTM Tier VI"))
+        assertFalse(HotmProgress.isTierSelectorRow("Heart of the Mountain 5"))
+        assertFalse(HotmProgress.isTierSelectorRow("Mining Speed"))
+    }
+
+    @Test
+    fun `hover without a menu scan never adopts an unanchored tier`() {
+        val addon = HotmAddon()
+        assertNull(addon.recordHoveredTooltip("Tier 7", listOf("Tier 7", "Progress: 8%", "12,000/150k", "LOCKED")))
     }
 
     @Test

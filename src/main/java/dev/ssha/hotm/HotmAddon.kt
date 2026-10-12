@@ -64,6 +64,8 @@ class HotmAddon : ClientModInitializer {
 
     private companion object {
         const val PAGE_LOAD_MS = 1_500L
+        // A visible HOTM menu only belongs to our silent read if we sent /hotm recently.
+        const val READ_OWNERSHIP_MS = 10_000L
     }
     private fun nowMillis(): Long = System.nanoTime() / 1_000_000L
 
@@ -75,6 +77,9 @@ class HotmAddon : ClientModInitializer {
 
     internal fun recordHoveredTooltip(name: String, lines: List<String>): HotmProgress.Observation? {
         lastHoveredTooltip = listOf(name) + lines
+        // Without a menu scan there is no unlock status to anchor against, so a hovered
+        // future locked row would read as current tier. The tick scan captures it instead.
+        if (lastHotmMenu.isEmpty()) return null
         // Use the whole menu's unlock status even when a future locked tier is hovered.
         val items = lastHotmMenu.filterNot { it.first == name } + (name to lines)
         return HotmProgress.readMenuObservation(items)
@@ -161,14 +166,16 @@ class HotmAddon : ClientModInitializer {
             pickaxeResetTracker.observe(TabWidget.PICKAXE_COOLDOWN.lines.map { it.string }, now)) showPickaxeReset()
         if (settingsRequested) {
             settingsRequested = false
+            SshaUpdateMenu.installed = installedVersion()
+            SshaUpdateMenu.latest = lastKnownLatestVersion
+            SshaUpdateMenu.checking = updateCheckInProgress
             AddonConfigMenu.open(AddonSettings.data, { AddonSettings.save() },
                 moveWidget = { hudIntegration.requestEditor() }, resetPosition = { hudIntegration.resetPosition() },
                 resetRate = { rateTracker.reset(); xpRateTracker.reset(); commissionsWasActive = false }, recheck = { requestRecheck(minecraft) },
                 moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
                 resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
-                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved,
-                updateStatus = updateStatusText())
+                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
@@ -222,14 +229,25 @@ class HotmAddon : ClientModInitializer {
                 hiddenMenu = null
                 pageTurnedFrom = null
                 minecraft.player?.closeContainer()
+            } else if (!autoRefresh.awaitingMenu()) {
+                // The wait expired without a usable read. Drop the claim so future silent
+                // reads are hidden again instead of flashing visible menus forever.
+                hiddenMenu = null
+                pageTurnedFrom = null
+                if (minecraft.gui.screen() == null) minecraft.player?.closeContainer()
             }
         }
 
         val menu = container ?: return
         if (!HotmProgress.isHotmInventoryTitle(menu.title.string)) return
-        val observation = recordMenu(menuItems(menu))?.also(::applyObservation)
-        // Close only the menu our silent read opened; a menu the player opened stays open.
-        if (hiddenMenu == null && autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) minecraft.player?.closeContainer()
+        val items = menuItems(menu)
+        val observation = recordMenu(items)?.also(::applyObservation)
+        // Our silent read missed its claim and is visible: still turn the page and close
+        // it once read. A menu the player opened themselves is never paged or closed.
+        if (hiddenMenu == null && autoRefresh.awaitingMenu() && autoRefresh.sentWithin(now, READ_OWNERSHIP_MS)) {
+            if (turnToXpPage(minecraft, menu, items, observation, now)) return
+            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) minecraft.player?.closeContainer()
+        }
     }
 
     /** Every login surfaces a known pending update without another network check. Only the first
@@ -242,8 +260,6 @@ class HotmAddon : ClientModInitializer {
     }
 
     /** Red installed → green latest, mirroring SkyHanni's About page; unknown until checked. */
-    private fun updateStatusText(): String = updateStatusText(installedVersion(), lastKnownLatestVersion)
-
     internal fun updateStatusText(installed: String, latest: String?): String {
         latest ?: return "§7Installed: §f$installed §8— press Update to check for a newer release."
         return if (isNewerRelease(latest, installed)) "§c$installed §7➔ §a$latest"
@@ -262,6 +278,7 @@ class HotmAddon : ClientModInitializer {
         }
         pendingUpdate = null
         updateCheckInProgress = true
+        SshaUpdateMenu.checking = true
         if (!quiet) {
             updateBanner.show(nowMillis(), "Checking for SSHA updates…", "Installed: ${installedVersion()}", UpdateStatusBanner.GRAY)
             notify("§7Checking the latest stable SSHA release…")
@@ -269,12 +286,14 @@ class HotmAddon : ClientModInitializer {
         setUpdateConnectionTimeouts()
         val future = runCatching { context.checkUpdate("full").orTimeout(20, TimeUnit.SECONDS) }.getOrElse { failure ->
             updateCheckInProgress = false
+            SshaUpdateMenu.checking = false
             logger.warn("SSHA update check failed to start", failure)
             if (!quiet) notify("§cSSHA update check could not start. You can download releases manually from GitHub.")
             return
         }
         future.whenComplete { update, error -> Minecraft.getInstance().execute {
             updateCheckInProgress = false
+            SshaUpdateMenu.checking = false
             if (error != null) {
                 logger.warn("SSHA update check failed", error)
                 if (!quiet) {
@@ -286,6 +305,7 @@ class HotmAddon : ClientModInitializer {
             if (update == null || !update.isUpdateAvailable) {
                 pendingUpdate = null
                 lastKnownLatestVersion = installedVersion()
+                SshaUpdateMenu.latest = lastKnownLatestVersion
                 if (!quiet) {
                     updateBanner.show(nowMillis(), "SSHA ${installedVersion()} is up to date", "No newer verified stable release.", UpdateStatusBanner.GREEN)
                     notify("§aSSHA is up to date, or no verified stable JAR release is available.")
@@ -294,15 +314,11 @@ class HotmAddon : ClientModInitializer {
             }
             pendingUpdate = update
             lastKnownLatestVersion = targetVersion(update)
-            updateBanner.show(nowMillis(), "SSHA ${installedVersion()} → ${targetVersion(update)} available", "Downloading and verifying…", UpdateStatusBanner.YELLOW)
-            if (quiet) {
-                // Logins announce; they never install without being asked.
-                announcePendingUpdate(update)
-            } else {
-                // Check and install are one action: a verified newer release installs right away.
-                notify("§eSSHA ${targetVersion(update)} is available. Installing it now.")
-                installAvailableUpdate()
-            }
+            SshaUpdateMenu.latest = lastKnownLatestVersion
+            updateBanner.show(nowMillis(), "SSHA ${installedVersion()} → ${targetVersion(update)} available",
+                "Click the chat message to install, or download manually.", UpdateStatusBanner.YELLOW)
+            // Checks only check: installs always go through the chat prompt, never silently.
+            announcePendingUpdate(update)
         } }
     }
 
@@ -455,13 +471,17 @@ class HotmAddon : ClientModInitializer {
     ): Boolean {
         val before = pageTurnedFrom
         if (before != null) return items == before && now - pageTurnedAt < PAGE_LOAD_MS
+        // Empty items mean the menu contents have not arrived yet: keep waiting for them.
+        if (items.isEmpty()) return true
         if (!HotmProgress.needsSecondPageForXp(observation)) return false
         val nextPage = menu.menu.slots.firstOrNull {
             !it.item.isEmpty && HotmProgress.isNextPageItemName(it.item.hoverName.string)
         } ?: return false
         val player = minecraft.player ?: return false
+        // Slot positions are the packet slot ids; never trust a renamed index field.
+        val slotId = menu.menu.slots.indexOf(nextPage).takeIf { it >= 0 } ?: nextPage.index
         // Right-click, as the Next Page button expects; a left-click does not turn the page.
-        minecraft.gameMode?.handleContainerInput(menu.menu.containerId, nextPage.index, 1, ContainerInput.PICKUP, player)
+        minecraft.gameMode?.handleContainerInput(menu.menu.containerId, slotId, 1, ContainerInput.PICKUP, player)
         pageTurnedFrom = items
         pageTurnedAt = now
         return true

@@ -73,12 +73,38 @@ class AddonConfigMenuTest {
     }
 
     @Test
-    fun `about check and install is one action through the injected update flow`() {
+    fun `about version header routes its primary action through the injected update flow`() {
         var checks = 0
-        val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {},
+        AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {},
             checkForUpdates = { checks++ })
-        config.about.updates.run()
+        SshaUpdateMenu.onCheck()
         assertEquals(1, checks)
+    }
+
+    @Test
+    fun `version header shows SkyHanni-style big text states`() {
+        SshaUpdateMenu.checking = false
+        SshaUpdateMenu.installed = "1.4.7"
+        SshaUpdateMenu.latest = null
+        assertEquals("§f1.4.7", SshaUpdateMenu.versionText())
+        assertEquals("Check for Updates", SshaUpdateMenu.primaryLabel())
+        assertEquals("Check for Updates", SshaUpdateMenu.checkLabel())
+        assertFalse(SshaUpdateMenu.hasUpdate())
+        SshaUpdateMenu.latest = "9.9.9"
+        assertTrue(SshaUpdateMenu.hasUpdate())
+        assertEquals("§c1.4.7➜ §a9.9.9", SshaUpdateMenu.versionText())
+        assertEquals("Manually download", SshaUpdateMenu.primaryLabel())
+        assertEquals("Check for Updates", SshaUpdateMenu.checkLabel())
+        SshaUpdateMenu.latest = "1.4.7"
+        assertFalse(SshaUpdateMenu.hasUpdate())
+        assertEquals("§a1.4.7", SshaUpdateMenu.versionText())
+        assertEquals("Up to date", SshaUpdateMenu.primaryLabel())
+        SshaUpdateMenu.checking = true
+        assertEquals("§7Checking…", SshaUpdateMenu.versionText())
+        assertEquals("Checking…", SshaUpdateMenu.primaryLabel())
+        assertEquals("Checking…", SshaUpdateMenu.checkLabel())
+        SshaUpdateMenu.checking = false
+        SshaUpdateMenu.latest = null
     }
 
     @Test
@@ -116,11 +142,19 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
-        listOf("intro", "updateStatus", "updates", "changelog", "manualDownload", "releaseNotes", "source", "issues").forEach { field ->
+        listOf("currentVersion", "releaseNotes", "issues").forEach { field ->
             val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
             assertNotNull(option, "About $field")
             assertNotNull(checkNotNull(option).editor)
         }
+        listOf("source").forEach { field ->
+            val option = processor.getOptionFromField(ExtraMenuConfig::class.java.getField(field))
+            assertNotNull(option, "Extra $field")
+            assertNotNull(checkNotNull(option).editor)
+        }
+        val versionOption = checkNotNull(processor.getOptionFromField(AboutMenuConfig::class.java.getField("currentVersion")))
+        assertTrue(versionOption.editor is GuiOptionEditorSshaUpdateCheck)
+        assertEquals(62, versionOption.editor.height)
         listOf("enabled", "overflowWarning", "showStored", "showSession", "smoothRate", "move").forEach { field ->
             assertNotNull(processor.getOptionFromField(GrindingWidgetMenuConfig::class.java.getField(field)), field)
         }

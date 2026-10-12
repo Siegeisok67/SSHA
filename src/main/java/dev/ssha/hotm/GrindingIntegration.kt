@@ -264,8 +264,9 @@ internal class GrindingIntegration(
 
     private fun readSack(event: InventoryOpenEvent) {
         val items = event.inventoryItems.values.toList()
+        val at = now()
         Minecraft.getInstance().execute {
-            items.forEach { item -> sacks.read(item.getInternalName().asString(), item.getCleanLore()) }
+            items.forEach { item -> sacks.read(item.getInternalName().asString(), item.getCleanLore(), at) }
             // Show what is actually in the sacks right away, even outside mining areas.
             refreshStored()
             lastSnapshotAt = Long.MIN_VALUE
@@ -276,20 +277,28 @@ internal class GrindingIntegration(
     /**
      * Pushes known sack contents into Stored. Freshly opened sack lore is server ground
      * truth and wins over the API, which can hold a cached value (loaded at login) until
-     * SkyHanni processes the next sack open. The API still covers wiped or never-opened sacks.
+     * SkyHanni processes the next sack open. Lore older than [LORE_FRESH_MS] yields to the
+     * live API again, so a sack opened long ago can never shadow current amounts forever.
+     * The API still covers wiped or never-opened sacks.
      */
     private fun refreshStored() {
+        val now = now()
         GrindingMaterial.entries.forEach { material ->
             val config = settings().grinding[material]
             val tracker = checkNotNull(trackers[material])
             if (!config.enabled && !config.compactPopup && tracker.storedRaw == null) return@forEach
             tracker.stored(
-                resolveStoredAmount(sacks[material.rawId]?.amount, apiAmount(material.rawId)),
-                material.enchantedId?.let { resolveStoredAmount(sacks[it]?.amount, apiAmount(it)) },
-                resolveStoredAmount(sacks[material.enchantingId]?.amount, apiAmount(material.enchantingId)),
+                resolveStored(material.rawId, now),
+                material.enchantedId?.let { resolveStored(it, now) },
+                resolveStored(material.enchantingId, now),
                 config.compactAt,
             )
         }
+    }
+
+    private fun resolveStored(id: String, now: Long): Long? {
+        val entry = sacks[id]
+        return resolveStoredAmount(entry?.amount, entry?.readAt ?: Long.MIN_VALUE, apiAmount(id), now)
     }
 
     private fun apiAmount(id: String): Long? {
@@ -310,8 +319,9 @@ internal class GrindingIntegration(
                 return "${item.amount}(${item.getStatus()})"
             }
             fun lore(id: String): String = sacks[id]?.let { "${it.amount}/${it.limit}" } ?: "-"
-            add("${material.displayName}: apiRaw=${api(material.rawId)} loreRaw=${lore(material.rawId)} " +
-                "stored=${tracker.storedRaw ?: "?"} session=${tracker.totalRaw}")
+            fun part(id: String?): String = id?.let { "api=${api(it)},lore=${lore(it)}" } ?: "-"
+            add("${material.displayName}: raw(${part(material.rawId)}) ench(${part(material.enchantedId)}) " +
+                "prod(${part(material.enchantingId)}) stored=${tracker.storedRaw ?: "?"} session=${tracker.totalRaw}")
         }
     }
 
@@ -433,8 +443,25 @@ internal class GrindingIntegration(
 
     private enum class GrindingTitle { COMPACT }
     companion object {
-        /** Freshly read sack lore beats a possibly cached API value; the API covers missing lore. */
-        internal fun resolveStoredAmount(loreAmount: Long?, apiAmount: Long?): Long? = loreAmount ?: apiAmount
+        /** Opened sack lore stays authoritative for this long; afterwards the live API wins. */
+        const val LORE_FRESH_MS = 5 * 60_000L
+
+        /**
+         * Freshly read sack lore beats a possibly cached API value; stale lore yields to the
+         * live API so an old open can never shadow current amounts. The API covers missing lore.
+         */
+        internal fun resolveStoredAmount(
+            loreAmount: Long?,
+            loreAt: Long,
+            apiAmount: Long?,
+            now: Long,
+            freshMs: Long = LORE_FRESH_MS,
+        ): Long? {
+            if (loreAmount != null && (apiAmount == null || loreAt == Long.MIN_VALUE || now - loreAt <= freshMs)) {
+                return loreAmount
+            }
+            return apiAmount ?: loreAmount
+        }
         internal fun jewelIsland(island: IslandType): Boolean = island == IslandType.MINESHAFT || island == IslandType.DWARVEN_MINES
         private val miningMaterialIds = setOf(
             "MITHRIL_ORE", "ENCHANTED_MITHRIL", "TITANIUM_ORE", "ENCHANTED_TITANIUM",

@@ -15,6 +15,7 @@ import at.hannibal2.skyhanni.deps.moulconfig.observer.Property
 import at.hannibal2.skyhanni.deps.moulconfig.processor.ConfigProcessorDriver
 import at.hannibal2.skyhanni.deps.moulconfig.processor.MoulConfigProcessor
 import at.hannibal2.skyhanni.utils.ConfigUtils
+import at.hannibal2.skyhanni.utils.OSUtils
 import com.google.gson.annotations.Expose
 
 internal object AddonConfigMenu {
@@ -33,11 +34,10 @@ internal object AddonConfigMenu {
         resetPowder: () -> Unit,
         checkForUpdates: () -> Unit,
         resetAllGrinding: () -> Unit,
-        updateStatus: String = "",
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
             { message -> SshaChat.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding, updateStatus)
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -60,13 +60,13 @@ class AddonMenuConfig internal constructor(
     resetPowder: () -> Unit = {},
     checkForUpdates: () -> Unit = {},
     resetAllGrinding: () -> Unit = {},
-    updateStatus: String = "",
 ) : Config() {
     @Expose @JvmField
     @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
-    val about = AboutMenuConfig().apply {
-        setUpdateAction(checkForUpdates)
-        setUpdateStatusText(updateStatus)
+    val about = AboutMenuConfig().also {
+        SshaUpdateMenu.onCheck = checkForUpdates
+        SshaUpdateMenu.onManualDownload = { OSUtils.openBrowser(RELEASES_PAGE) }
+        SshaUpdateMenu.onChangelog = { OSUtils.openBrowser(RELEASES_PAGE) }
     }
 
     @Expose @JvmField
@@ -78,12 +78,24 @@ class AddonMenuConfig internal constructor(
     val grinding = GrindingMenuConfig(settings.grinding, save, moveGrinding, resetGrindingPosition, resetGrinding, notify,
         settings.powder, movePowder, resetPowderPosition, resetPowder, resetAllGrinding)
 
+    @Expose @JvmField
+    @Category(name = "Extra", desc = "Project links.")
+    val extra = ExtraMenuConfig()
+
     internal fun createProcessor(): MoulConfigProcessor<AddonMenuConfig> = MoulConfigProcessor.withDefaults(this).also {
+        it.registerConfigEditor(SshaVersionDisplay::class.java) { option, _ -> GuiOptionEditorSshaUpdateCheck(option) }
         ConfigProcessorDriver(it).processConfig(this)
     }
 
     override fun getTitle(): StructuredText = StructuredText.of("§bSSHA ${installedVersion()} §7by §eSiege §7— SkyHanni + Skyblocker-inspired QOL")
     override fun saveNow() = save()
+}
+
+class ExtraMenuConfig internal constructor() {
+    @JvmField
+    @ConfigOption(name = "Source Code", desc = "Open the SSHA repository on GitHub.")
+    @ConfigEditorButton(buttonText = "Source")
+    val source = Runnable { OSUtils.openBrowser(SOURCE_PAGE) }
 }
 
 class MiningMenuConfig internal constructor(

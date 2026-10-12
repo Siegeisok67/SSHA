@@ -3,11 +3,11 @@ package dev.ssha.hotm
 import java.util.Locale
 
 internal class SackSnapshot {
-    data class Entry(val amount: Long, val limit: Long)
+    data class Entry(val amount: Long, val limit: Long, val readAt: Long = Long.MIN_VALUE)
     private val entries = mutableMapOf<String, Entry>()
     operator fun get(id: String): Entry? = entries[id]
-    fun read(id: String, lore: List<String>) {
-        parse(lore)?.let { entries[id] = it }
+    fun read(id: String, lore: List<String>, now: Long = Long.MIN_VALUE) {
+        parse(lore)?.let { entries[id] = it.copy(readAt = now) }
     }
     fun change(id: String, delta: Long) {
         entries[id]?.let { entries[id] = it.copy(amount = (it.amount + delta).coerceAtLeast(0L)) }
