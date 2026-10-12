@@ -32,4 +32,24 @@ class SessionStatsPersistenceTest {
         assertTrue(xp.hasObservedXp)
         assertEquals(270_000.0, xp.average(false)!!, 0.0001)
     }
+
+    @Test
+    fun `saved powder and grinding totals restore after a JSON round trip`() {
+        val powder = MithrilPowderTracker()
+        powder.gainPowder(1_000L, 0L, duringEvent = true)
+        val settings = AddonSettingsData()
+        settings.savedTrackers["Apple"] = powder.saved().toMutableMap()
+        val gson = GsonBuilder().create()
+        val restored = gson.fromJson(gson.toJson(settings), AddonSettingsData::class.java)
+
+        val fresh = MithrilPowderTracker()
+        fresh.restore(restored.savedTrackers.getValue("Apple"))
+        assertEquals(1_000L, fresh.powder)
+        assertEquals(1_000L, fresh.powderDuringEvents)
+
+        val grinding = GrindingTracker(GrindingMaterial.GOLD)
+        grinding.restore(5_120L, 60_000L)
+        assertEquals(5_120L, grinding.totalRaw)
+        assertEquals(60_000L, grinding.activeMillis)
+    }
 }

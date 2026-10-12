@@ -119,4 +119,20 @@ internal class MithrilPowderTracker {
         mithril.reset(); titanium.reset(); powderRate.reset(); profitRate.reset(); drops.clear(); miningDrops.clear(); pendingProfit.clear()
         powder = 0L; powderDuringEvents = 0L; activeMillis = 0L; creditedThrough = null; lastActivity = null
     }
+    /** Keys: POWDER, POWDER_MITHRIL, POWDER_TITANIUM. */
+    fun saved(): Map<String, SavedTracker> = mapOf(
+        "POWDER" to SavedTracker(powder, powderDuringEvents, activeMillis),
+        "POWDER_MITHRIL" to SavedTracker(mithrilRaw, 0L, mithril.activeMillis),
+        "POWDER_TITANIUM" to SavedTracker(titaniumRaw, 0L, titanium.activeMillis),
+    )
+    fun restore(saved: Map<String, SavedTracker>) {
+        reset()
+        saved["POWDER"]?.let {
+            powder = it.total
+            powderDuringEvents = it.eventTotal
+            activeMillis = it.activeMillis
+        }
+        saved["POWDER_MITHRIL"]?.let { mithril.restore(it.total, it.activeMillis) }
+        saved["POWDER_TITANIUM"]?.let { titanium.restore(it.total, it.activeMillis) }
+    }
 }

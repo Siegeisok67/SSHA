@@ -13,6 +13,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
@@ -43,6 +44,7 @@ class HotmAddon : ClientModInitializer {
     private val pickaxeResetTracker = PickaxeResetTracker()
     private val autoRefresh = AutoHotmRefresh()
     private val pickaxeBanner = PickaxeReadyBanner()
+    private val updateBanner = UpdateStatusBanner()
     private var commissionsScreenOpen = false
     // Silent-read menu that the Gui.setScreen mixin kept off screen; closed once its data arrives.
     private var hiddenMenu: AbstractContainerScreen<*>? = null
@@ -91,6 +93,7 @@ class HotmAddon : ClientModInitializer {
             AddonSettings.data.commissionWork = rateTracker.observedWork
             AddonSettings.data.hotmXpObserved = xpRateTracker.observedXp
             AddonSettings.data.hotmXpMeasuredMillis = xpRateTracker.measurementMillis
+            if (::grindingIntegration.isInitialized) grindingIntegration.persistTrackers(AddonSettings.data)
         }
         lastRateEnabled = AddonSettings.data.rateEnabled
         hudIntegration = HotmHudIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::hudLines, rateTracker::estimates)
@@ -123,6 +126,8 @@ class HotmAddon : ClientModInitializer {
             recordHoveredTooltip(stack.hoverName.string, tooltip.map { it.string })?.let(::applyObservation)
         }
         ClientTickEvents.END_CLIENT_TICK.register(::onClientTick)
+        // Saved on quit as well as every 10 seconds, so a restart or update never loses tracker totals.
+        ClientLifecycleEvents.CLIENT_STOPPING.register { AddonSettings.save() }
         SilentHotmRead.install(::claimSilentMenu)
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(createCommand())
@@ -130,7 +135,12 @@ class HotmAddon : ClientModInitializer {
         HudElementRegistry.attachElementBefore(
             VanillaHudElements.CHAT,
             Identifier.fromNamespaceAndPath("ssha_hotm_addon", "hotm_tracker"),
-            { graphics, _ -> hudIntegration.render(graphics); grindingIntegration.render(graphics); pickaxeBanner.render(graphics, nowMillis()) },
+            { graphics, _ ->
+                hudIntegration.render(graphics)
+                grindingIntegration.render(graphics)
+                pickaxeBanner.render(graphics, nowMillis())
+                updateBanner.render(graphics, nowMillis())
+            },
         )
     }
 
@@ -154,7 +164,7 @@ class HotmAddon : ClientModInitializer {
                 moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
                 resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
-                checkForUpdates = ::checkForUpdates, installAvailableUpdate = ::installAvailableUpdate)
+                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
@@ -180,7 +190,10 @@ class HotmAddon : ClientModInitializer {
         val commissions = HotmProgress.activeCommissions(
             if (TabWidget.COMMISSIONS.isActive) TabWidget.COMMISSIONS.lines.map { it.string } else emptyList(),
         )
-        if (commissions != AddonSettings.data.activeCommissions) {
+        val previousCommissions = AddonSettings.data.activeCommissions
+        // A collected commission leaves the tab widget; re-read /hotm so the commissions-left estimate catches up.
+        if (TabWidget.COMMISSIONS.isActive && commissions.size < previousCommissions.size) autoRefresh.request(now, 300L)
+        if (commissions != previousCommissions) {
             AddonSettings.data.activeCommissions = commissions
             AddonSettings.save()
         }
@@ -201,7 +214,7 @@ class HotmAddon : ClientModInitializer {
             val items = menuItems(hidden)
             val hiddenObservation = recordMenu(items)?.also(::applyObservation)
             if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
-            if (autoRefresh.menuOpened(now, hiddenObservation?.xpToNextTier != null)) {
+            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation))) {
                 hiddenMenu = null
                 pageTurnedFrom = null
                 minecraft.player?.closeContainer()
@@ -212,7 +225,7 @@ class HotmAddon : ClientModInitializer {
         if (!HotmProgress.isHotmInventoryTitle(menu.title.string)) return
         val observation = recordMenu(menuItems(menu))?.also(::applyObservation)
         // Close only the menu our silent read opened; a menu the player opened stays open.
-        if (hiddenMenu == null && autoRefresh.menuOpened(now, observation?.xpToNextTier != null)) minecraft.player?.closeContainer()
+        if (hiddenMenu == null && autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) minecraft.player?.closeContainer()
     }
 
     private fun checkForUpdates() {
@@ -227,6 +240,7 @@ class HotmAddon : ClientModInitializer {
         }
         pendingUpdate = null
         updateCheckInProgress = true
+        updateBanner.show(nowMillis(), "Checking for SSHA updates…", "Installed: ${installedVersion()}", UpdateStatusBanner.GRAY)
         notify("§7Checking the latest stable SSHA release…")
         setUpdateConnectionTimeouts()
         val future = runCatching { context.checkUpdate("full").orTimeout(20, TimeUnit.SECONDS) }.getOrElse { failure ->
@@ -239,21 +253,21 @@ class HotmAddon : ClientModInitializer {
             updateCheckInProgress = false
             if (error != null) {
                 logger.warn("SSHA update check failed", error)
+                updateBanner.show(nowMillis(), "SSHA update check failed", "Installed version unchanged. Try again later.", UpdateStatusBanner.RED)
                 notify("§cSSHA update check failed. You can download releases manually from GitHub.")
                 return@execute
             }
             if (update == null || !update.isUpdateAvailable) {
                 pendingUpdate = null
+                updateBanner.show(nowMillis(), "SSHA ${installedVersion()} is up to date", "No newer verified stable release.", UpdateStatusBanner.GREEN)
                 notify("§aSSHA is up to date, or no verified stable JAR release is available.")
                 return@execute
             }
             pendingUpdate = update
-            ChatUtils.clickableChat(
-                "§eSSHA ${update.update.versionName} is available. Click here to install it.",
-                onClick = ::installAvailableUpdate,
-                hover = "§eDownload and verify the release; restart Minecraft manually to finish installation.",
-            )
-            ChatUtils.chat("§eOr choose About → Install Update in your settings menu.")
+            // Check and install are one action: a verified newer release installs right away.
+            updateBanner.show(nowMillis(), "SSHA ${installedVersion()} → ${targetVersion(update)} available", "Downloading and verifying…", UpdateStatusBanner.YELLOW)
+            notify("§eSSHA ${targetVersion(update)} is available. Installing it now.")
+            installAvailableUpdate()
         } }
     }
 
@@ -285,9 +299,11 @@ class HotmAddon : ClientModInitializer {
             updateInstallInProgress = false
             if (error != null) {
                 logger.warn("SSHA update install failed", error)
+                updateBanner.show(nowMillis(), "SSHA update failed", "The current version stays active.", UpdateStatusBanner.RED)
                 notify("§cSSHA update could not be installed. The current version remains active; try the GitHub release page.")
             } else {
                 pendingUpdate = null
+                updateBanner.show(nowMillis(), "SSHA ${targetVersion(update)} is ready", "Restart Minecraft to finish installing.", UpdateStatusBanner.GREEN)
                 notify("§aSSHA update downloaded and verified. Exit Minecraft to install it, then relaunch from your launcher.")
                 ChatUtils.clickableChat(
                     "§a§lClick here to restart your game!",
@@ -298,6 +314,9 @@ class HotmAddon : ClientModInitializer {
             }
         } }
     }
+
+    private fun targetVersion(update: PotentialUpdate): String =
+        update.update.versionNumber?.asString?.trimStart('v', 'V') ?: update.update.versionName
 
     private fun closeGameForRestart() {
         Minecraft.getInstance().stop()
@@ -396,7 +415,8 @@ class HotmAddon : ClientModInitializer {
             !it.item.isEmpty && HotmProgress.isNextPageItemName(it.item.hoverName.string)
         } ?: return false
         val player = minecraft.player ?: return false
-        minecraft.gameMode?.handleContainerInput(menu.menu.containerId, nextPage.index, 0, ContainerInput.PICKUP, player)
+        // Right-click, as the Next Page button expects; a left-click does not turn the page.
+        minecraft.gameMode?.handleContainerInput(menu.menu.containerId, nextPage.index, 1, ContainerInput.PICKUP, player)
         pageTurnedFrom = items
         pageTurnedAt = now
         return true
@@ -619,6 +639,8 @@ internal data class AddonSettingsData(
     var commissionWork: Double = 0.0,
     var hotmXpObserved: Long = 0L,
     var hotmXpMeasuredMillis: Long = 0L,
+    // Saved tracker totals per SkyBlock profile name; see GrindingIntegration.persistTrackers.
+    var savedTrackers: MutableMap<String, MutableMap<String, SavedTracker>> = mutableMapOf(),
 ) {
     fun setManualProgress(tier: Int, earnedXp: Long) {
         val observation = HotmProgress.manualObservation(tier, earnedXp)

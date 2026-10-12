@@ -1,3 +1,23 @@
+# SSHA 1.4.2 — HOTM tier read from the core item, per-profile grinding totals
+
+- **HOTM tier past 6 fixed.** The tier now comes from the Heart of the Mountain item's `Level N/10` lore line, the same source SkyHanni uses, instead of tier-row names. Silent `/hotm` reads finish on page 1 at tier 4 or below with no click; at tier 5+ they right-click Next Page only when the XP line is still missing. `/ssha auto` stays nearly invisible via the existing menu-hiding mixin.
+- **One-step updates.** About → Check & Install Update downloads and verifies a newer stable release in one action; a small HUD banner shows checking / failed / up-to-date status.
+- **Per-profile grinding totals.** Grinding and mithril powder trackers are saved per SkyBlock profile, restored on profile switch, and persisted before every settings save plus on game quit. A new Reset All Saved Tracker Data button clears every profile's saved totals.
+- **Sack counts prefer live data.** SkyHanni's live sack amounts now take priority over menu-lore deltas, which drifted between sack opens.
+- **Commission claims refresh faster.** Collecting a commission (tab list shrinks) triggers a silent `/hotm` re-read so commissions-left catches up.
+
+## Release artifact
+
+`build/libs/ssha_1.4.2.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The silent-read hiding, the right-click page turn, quit-time persistence, HUD appearance and sack numbers still need in-game verification. While the Blue Goblin Egg buff is active the displayed tier can read one high, because menu text carries no color codes. Live Hypixel packets and Skyblocker mixin compatibility are untested here.
+
+---
+
 # SSHA 1.4.1 — About in settings, saved session stats, silent /hotm reads
 
 - **About in settings.** The About category shows the stable-release check, install, release notes, source and issue links directly, with no extra page.

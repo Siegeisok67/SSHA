@@ -57,15 +57,20 @@ class AddonConfigMenuTest {
     }
 
     @Test
-    fun `about actions run inline through the injected update check and install`() {
+    fun `about check and install is one action through the injected update flow`() {
         var checks = 0
-        var installs = 0
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {},
-            checkForUpdates = { checks++ }, installAvailableUpdate = { installs++ })
+            checkForUpdates = { checks++ })
         config.about.updates.run()
-        config.about.installUpdate.run()
         assertEquals(1, checks)
-        assertEquals(1, installs)
+    }
+
+    @Test
+    fun `reset all saved grinding data button runs the injected reset`() {
+        var resets = 0
+        val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {}, resetAllGrinding = { resets++ })
+        config.grinding.resetAllSaved.run()
+        assertEquals(1, resets)
     }
 
     @Test
@@ -95,7 +100,7 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
-        listOf("intro", "updates", "installUpdate", "releaseNotes", "source", "issues").forEach { field ->
+        listOf("intro", "updates", "releaseNotes", "source", "issues").forEach { field ->
             val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
             assertNotNull(option, "About $field")
             assertNotNull(checkNotNull(option).editor)

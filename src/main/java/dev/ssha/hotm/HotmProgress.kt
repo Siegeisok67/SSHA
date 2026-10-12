@@ -3,6 +3,8 @@ package dev.ssha.hotm
 /** HOTM arithmetic and text parsing for client-visible game data. */
 object HotmProgress {
     private const val TIER_NUMBER = "(10|[1-9]|VIII|VII|VI|IV|IX|III|II|V|X|I)"
+    // The Heart of the Mountain item's first lore line is its own level out of 10 (SkyHanni reads the same line).
+    private val coreLevelPattern = Regex("(?i)^Level\\s+(10|[1-9])/10$")
     private val tierItemPattern = Regex("(?i)^(?:(?:HOTM|HEART OF THE MOUNTAIN)(?:\\s+(?:TIER|LEVEL))?|TIER)\\s*[:#]?\\s+$TIER_NUMBER$")
 
     data class Observation(val tier: Int?, val xpToNextTier: Long?)
@@ -83,6 +85,10 @@ object HotmProgress {
     fun needsSecondPageForXp(observation: Observation?): Boolean =
         observation != null && observation.tier != null && observation.tier >= 5 && observation.xpToNextTier == null
 
+    /** A silent read is finished once XP is known, or the tier is below 5 and needs no second page. */
+    fun readComplete(observation: Observation?): Boolean =
+        observation != null && (observation.xpToNextTier != null || (observation.tier != null && observation.tier < 5))
+
     /** The /hotm page-turn arrow, named "Next Page" with an optional arrow suffix. */
     fun isNextPageItemName(name: String): Boolean = name.cleanText().startsWith("Next Page", ignoreCase = true)
 
@@ -122,7 +128,10 @@ object HotmProgress {
         val currentTierPattern = Regex(
             "(?i)^(?:(?:YOUR|CURRENT)\\s+(?:(?:HOTM|HEART OF THE MOUNTAIN)\\s*)?(?:TIER|LEVEL)?|(?:HOTM|HEART OF THE MOUNTAIN)(?:\\s+(?:TIER|LEVEL))?|(?:TIER|LEVEL))\\s*[:#]?\\s*$TIER_NUMBER$",
         )
-        val explicitTier = normalized.filterNot { it.equals(name, ignoreCase = true) }.firstNotNullOfOrNull { line ->
+        val coreTier = if (summaryItem) normalized.firstNotNullOfOrNull { line ->
+            coreLevelPattern.matchEntire(line)?.groupValues?.get(1)?.toTierOrNull()
+        } else null
+        val explicitTier = coreTier ?: normalized.filterNot { it.equals(name, ignoreCase = true) }.firstNotNullOfOrNull { line ->
             currentTierPattern.matchEntire(line)?.groupValues?.get(1)?.toTierOrNull()
         }
         val nextTier = normalized.firstNotNullOfOrNull { line ->

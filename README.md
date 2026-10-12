@@ -8,7 +8,7 @@ The source is included so SSHA can be inspected, built, tested, maintained, and 
 
 ## Install
 
-Download **ssha_1.4.1.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
+Download **ssha_1.4.2.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
 
 Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API **0.155.2+26.2**, Fabric Language Kotlin **1.13.12+kotlin.2.4.0+**, and compatible SkyHanni **9.0.0+**. Skyblocker and SkyOcean are optional, not runtime requirements.
 
@@ -56,7 +56,7 @@ Settings and saved stats live at `config/ssha-hotm-addon.json` for compatibility
 
 Java 25: `./gradlew build` (Windows: `gradlew.bat build`).
 
-- Installable client jar: `build/libs/ssha_1.4.1.jar`
+- Installable client jar: `build/libs/ssha_1.4.2.jar`
 - GitHub automatically prepares the source archive when a release is published.
 
 Automated tests cover parsing, command dispatch and settings persistence (including saved session stats), rates/pause/resume, completion deduplication, pickaxe readiness, the HUD and ETA countdown, sack lore/capacities, reconciliation, event reward classification and renderer bounds. A build cannot prove live Hypixel packet behavior, Skyblocker mixin compatibility, the silent-read hiding, editor mouse interactions or appearance; these still need in-game verification. Never include personal Minecraft config, credentials, logs or caches in releases.

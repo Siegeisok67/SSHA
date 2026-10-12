@@ -13,6 +13,7 @@ class GrindingMenuConfig internal constructor(
     private val settings: GrindingSettingsData, private val save: () -> Unit, private val move: (GrindingMaterial) -> Unit,
     private val resetPosition: (GrindingMaterial) -> Unit, private val reset: (GrindingMaterial) -> Unit, private val notify: (String) -> Unit,
     powderSettings: PowderSettingsData, movePowder: () -> Unit, resetPowderPosition: () -> Unit, resetPowder: () -> Unit,
+    private val resetAllAction: () -> Unit,
 ) {
     private fun widget(material: GrindingMaterial) = GrindingWidgetMenuConfig(settings[material], save,
         { move(material) }, { resetPosition(material) }, { reset(material) }, notify)
@@ -33,6 +34,9 @@ class GrindingMenuConfig internal constructor(
     val jewels = widget(GrindingMaterial.JEWELS)
     @Expose @JvmField @ConfigOption(name = "Mithril Powder", desc = "Dwarven Mines powder/hour, active time, event gains, and estimated Bazaar value from enchanted mithril/titanium and observed event drops. Not realized sale profit; no forge-time speculation.") @Accordion
     val powder = PowderWidgetMenuConfig(powderSettings, save, movePowder, resetPowderPosition, resetPowder)
+
+    @JvmField @ConfigOption(name = "Reset All Saved Tracker Data", desc = "Permanently clear every saved grinding and mithril powder tracker for all SkyBlock profiles, including totals and active time. Settings and widget positions are kept.") @ConfigEditorButton(buttonText = "Reset")
+    val resetAllSaved = Runnable { resetAllAction() }
 }
 
 class PowderWidgetMenuConfig internal constructor(

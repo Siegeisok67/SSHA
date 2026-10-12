@@ -51,9 +51,11 @@ internal class PowderAccounting {
                 remaining -= matched
             }
             rewards.removeAll { it.amount == 0L }
-            if (delta.claiming) { commission += remaining; remaining = 0L }
+            if (delta.claiming) commission += remaining
             val counted = delta.amount - if (includeCommissions) 0L else commission
-            val eventAmount = event + if (delta.doublePowder) remaining else 0L
+            // During 2x Powder, half of the powder that is not a commission or event reward is event powder.
+            val doubled = if (delta.doublePowder) (delta.amount - commission - event).coerceAtLeast(0L) / 2 else 0L
+            val eventAmount = minOf(counted, event + doubled)
             if (counted > 0L) accept(Gain(counted, eventAmount, if (includeCommissions) commission else 0L), delta.at)
         }
         rewards.removeAll { now - it.at > 5_000L }

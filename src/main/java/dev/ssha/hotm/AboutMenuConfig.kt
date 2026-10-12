@@ -24,14 +24,12 @@ class AboutMenuConfig internal constructor() {
     val intro: String = ""
 
     @JvmField
-    @ConfigOption(name = "Check for Updates", desc = "Look for a newer stable release. Pre-releases are ignored and nothing runs in the background.")
-    @ConfigEditorButton(buttonText = "Check")
+    @ConfigOption(
+        name = "Check & Install Update",
+        desc = "Check the latest stable release. If it is newer, it is downloaded and verified, then installs when Minecraft exits. Pre-releases are ignored and nothing runs in the background.",
+    )
+    @ConfigEditorButton(buttonText = "Update")
     val updates = Runnable { checkForUpdates() }
-
-    @JvmField
-    @ConfigOption(name = "Install Update", desc = "Download and verify the checked release. It installs when Minecraft exits; relaunch from your launcher afterwards.")
-    @ConfigEditorButton(buttonText = "Install")
-    val installUpdate = Runnable { installAvailableUpdate() }
 
     @JvmField
     @ConfigOption(name = "Release Notes", desc = "Open SSHA's latest GitHub release in your browser.")
@@ -51,8 +49,4 @@ class AboutMenuConfig internal constructor() {
     private var checkForUpdates: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
 
     internal fun setUpdateAction(action: () -> Unit) { checkForUpdates = action }
-
-    private var installAvailableUpdate: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
-
-    internal fun setInstallAction(action: () -> Unit) { installAvailableUpdate = action }
 }

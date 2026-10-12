@@ -77,6 +77,13 @@ internal data class GrindingSettingsData(
     }
 }
 
+/** One saved tracker: [total] is raw sack-equivalent units, [eventTotal] only used by powder. */
+internal data class SavedTracker(
+    var total: Long = 0L,
+    var eventTotal: Long = 0L,
+    var activeMillis: Long = 0L,
+)
+
 /** Count gains only when a net sack addition survives the compaction/reconciliation window. */
 internal class GrindingTracker(val material: GrindingMaterial) {
     companion object { const val RECONCILE_MS = 1_000L; const val IDLE_MS = CommissionRateTracker.IDLE_TIMEOUT_MS }
@@ -188,6 +195,12 @@ internal class GrindingTracker(val material: GrindingMaterial) {
         return String.format(Locale.US, "%02d:%02d:%02d", seconds / 3_600, seconds / 60 % 60, seconds % 60)
     }
     fun suspend(now: Long) { tick(now); pending.clear(); lastGain = null; lastActivityAt = null }
+    /** Reloads saved totals; the rate window restarts so the first hourly value is not inflated. */
+    fun restore(total: Long, active: Long) {
+        totalRaw = total
+        activeMillis = active
+        rate.reset()
+    }
     fun reset() {
         pending.clear(); blockedUntil = Long.MIN_VALUE
         totalRaw = 0L; activeMillis = 0L; lastTick = null; lastGain = null; lastActivityAt = null

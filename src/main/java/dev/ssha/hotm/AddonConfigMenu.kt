@@ -33,11 +33,11 @@ internal object AddonConfigMenu {
         resetPowderPosition: () -> Unit,
         resetPowder: () -> Unit,
         checkForUpdates: () -> Unit,
-        installAvailableUpdate: () -> Unit,
+        resetAllGrinding: () -> Unit,
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
             { message -> ChatUtils.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder, checkForUpdates, installAvailableUpdate)
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -59,13 +59,12 @@ class AddonMenuConfig internal constructor(
     resetPowderPosition: () -> Unit = {},
     resetPowder: () -> Unit = {},
     checkForUpdates: () -> Unit = {},
-    installAvailableUpdate: () -> Unit = {},
+    resetAllGrinding: () -> Unit = {},
 ) : Config() {
     @Expose @JvmField
     @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
     val about = AboutMenuConfig().apply {
         setUpdateAction(checkForUpdates)
-        setInstallAction(installAvailableUpdate)
     }
 
     @Expose @JvmField
@@ -75,7 +74,7 @@ class AddonMenuConfig internal constructor(
     @Expose @JvmField
     @Category(name = "Grinding", desc = "Separate compact material widgets. All trackers and popups start disabled.")
     val grinding = GrindingMenuConfig(settings.grinding, save, moveGrinding, resetGrindingPosition, resetGrinding, notify,
-        settings.powder, movePowder, resetPowderPosition, resetPowder)
+        settings.powder, movePowder, resetPowderPosition, resetPowder, resetAllGrinding)
 
     internal fun createProcessor(): MoulConfigProcessor<AddonMenuConfig> = MoulConfigProcessor.withDefaults(this).also {
         ConfigProcessorDriver(it).processConfig(this)

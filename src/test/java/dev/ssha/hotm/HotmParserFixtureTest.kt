@@ -1,6 +1,8 @@
 package dev.ssha.hotm
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class HotmParserFixtureTest {
@@ -119,6 +121,38 @@ class HotmParserFixtureTest {
             "Heart of the Mountain" to listOf("Tier: VI"),
             "Heart of the Mountain" to listOf("12,000 / 150,000 HOTM XP"),
         )))
+    }
+
+    @Test
+    fun `Heart of the Mountain level line gives the current tier at every tier`() {
+        (1..10).forEach { tier ->
+            assertEquals(
+                HotmProgress.Observation(tier, null),
+                HotmProgress.readMenuObservation(listOf("Heart of the Mountain" to listOf("§7Level $tier/10"))),
+                "tier $tier",
+            )
+        }
+        assertEquals(
+            HotmProgress.Observation(6, 138_000L),
+            HotmProgress.readMenuObservation(listOf(
+                "Heart of the Mountain" to listOf("§7Level 6/10", "§b12,000 / 150,000 HOTM XP"),
+                "Mining Speed" to listOf("Level 1/50"),
+            )),
+        )
+        assertEquals(null, HotmProgress.readObservation(listOf("Mining Speed", "Level 6/10")))
+    }
+
+    @Test
+    fun `tier four needs no page turn and no XP wait while tier five and up turn to page two`() {
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(4, null)))
+        assertTrue(HotmProgress.readComplete(HotmProgress.Observation(4, null)))
+        assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(5, null)))
+        assertFalse(HotmProgress.readComplete(HotmProgress.Observation(5, null)))
+        assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(6, null)))
+        assertFalse(HotmProgress.readComplete(HotmProgress.Observation(6, null)))
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(6, 138_000L)))
+        assertTrue(HotmProgress.readComplete(HotmProgress.Observation(6, 138_000L)))
+        assertFalse(HotmProgress.readComplete(null))
     }
 
     @Test

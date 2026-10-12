@@ -19,7 +19,8 @@ class LiveMiningTrackingTest {
             val gains = mutableListOf<PowderAccounting.Gain>()
             accounting.drain(1_000L, false) { gain, _ -> gains.add(gain) }
             assertEquals(100L, gains.sumOf { it.amount })
-            assertEquals(if (type == MiningEventType.DOUBLE_POWDER) 100L else 0L, gains.sumOf { it.eventAmount }, type.name)
+            // During 2x Powder, half of the ordinary powder is event powder.
+            assertEquals(if (type == MiningEventType.DOUBLE_POWDER) 50L else 0L, gains.sumOf { it.eventAmount }, type.name)
         }
         assertFalse(PowderAccounting.relevant(MiningEventType.BETTER_TOGETHER))
         assertFalse(PowderAccounting.relevant(MiningEventType.GONE_WITH_THE_WIND))
@@ -35,7 +36,7 @@ class LiveMiningTrackingTest {
             val gains = mutableListOf<PowderAccounting.Gain>()
             accounting.drain(1_050L, include) { gain, _ -> gains.add(gain) }
             assertEquals(if (include) 500L else 100L, gains.sumOf { it.amount })
-            assertEquals(100L, gains.sumOf { it.eventAmount })
+            assertEquals(50L, gains.sumOf { it.eventAmount })
             assertEquals(if (include) 400L else 0L, gains.sumOf { it.commissionAmount })
             accounting.drain(10_000L, include) { _, _ -> fail("No duplicate gain") }
         }

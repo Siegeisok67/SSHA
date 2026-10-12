@@ -55,6 +55,8 @@ internal class GrindingIntegration(
         widgetName = "SSHA Mithril Powder Grinding", compactTitle = "Mithril Powder")
     private var powderEnabled = false
     private var registered = false
+    // The SkyBlock profile whose trackers are live; saved data is keyed by profile name.
+    private var profile: String? = null
     private var lastSnapshotAt = Long.MIN_VALUE
     private var lastWarningSnapshotAt = Long.MIN_VALUE
     private var inSkyblock = false
@@ -91,10 +93,8 @@ internal class GrindingIntegration(
         val warningSnapshot = active && (lastWarningSnapshotAt == Long.MIN_VALUE || time - lastWarningSnapshotAt >= 1_000L)
         val profileReady = ProfileStorageData.sackProfiles != null
         if (profileReady && !profileReadyPrevious) {
-            trackers.values.forEach { it.reset() }
             popupAt.clear()
-            powderTracker.reset()
-        powderAccounting.reset()
+            powderAccounting.reset()
         }
         profileReadyPrevious = profileReady
         val amounts = if (snapshot && profileReady) SackApi.sackData.entries.associate { (id, item) ->
@@ -109,10 +109,11 @@ internal class GrindingIntegration(
             if (enabled[material] != trackerEnabled || (!active && inSkyblock)) tracker.suspend(time)
             enabled[material] = trackerEnabled
             if (active && trackerEnabled) tracker.tick(time)
+            // SkyHanni's sack API updates on every server change; lore deltas drift between sack opens.
             if (snapshot && (trackerEnabled || tracker.storedRaw != null)) tracker.stored(
-                sacks[material.rawId]?.amount ?: amounts[material.rawId],
-                material.enchantedId?.let { sacks[it]?.amount ?: amounts[it] },
-                sacks[material.enchantingId]?.amount ?: amounts[material.enchantingId], config.compactAt,
+                amounts[material.rawId] ?: sacks[material.rawId]?.amount,
+                material.enchantedId?.let { amounts[it] ?: sacks[it]?.amount },
+                amounts[material.enchantingId] ?: sacks[material.enchantingId]?.amount, config.compactAt,
             )
             val committedAt = tracker.latestCommittedAt
             val eligible = warningSnapshot && active
@@ -195,10 +196,9 @@ internal class GrindingIntegration(
     @HandleEvent
     fun onProfileJoin(event: ProfileJoinEvent) {
         if (event.name.isEmpty()) return
-        trackers.values.forEach { it.reset() }
+        switchProfile(event.name)
         popupAt.clear()
         sacks.clear(); craftedProducts.clear()
-        powderTracker.reset()
         powderAccounting.reset()
         profileReadyPrevious = false
         lastSnapshotAt = Long.MIN_VALUE
@@ -208,10 +208,8 @@ internal class GrindingIntegration(
 
     @HandleEvent
     fun onProfileDataReady(event: ProfileDataReadyEvent) {
-        trackers.values.forEach { it.reset() }
         popupAt.clear()
         sacks.clear(); craftedProducts.clear()
-        powderTracker.reset()
         powderAccounting.reset()
         profileReadyPrevious = true
         lastSnapshotAt = Long.MIN_VALUE
@@ -278,6 +276,48 @@ internal class GrindingIntegration(
             lastSnapshotAt = Long.MIN_VALUE
             lastWarningSnapshotAt = Long.MIN_VALUE
         }
+    }
+
+    /** Copies live totals into [data] under the current profile; called before every settings save. */
+    fun persistTrackers(data: AddonSettingsData) {
+        profile?.let { data.savedTrackers[it] = snapshotTrackers() }
+    }
+
+    /** Clears every saved tracker for every profile, plus the live totals. */
+    fun resetAllSaved() {
+        settings().savedTrackers.clear()
+        trackers.values.forEach { it.reset() }
+        popupAt.clear(); craftedProducts.clear()
+        powderTracker.reset(); powderAccounting.reset()
+        lastSnapshotAt = Long.MIN_VALUE
+        lastWarningSnapshotAt = Long.MIN_VALUE
+        save()
+    }
+
+    private fun switchProfile(name: String) {
+        if (profile == name) return
+        profile?.let { settings().savedTrackers[it] = snapshotTrackers() }
+        trackers.values.forEach { it.reset() }
+        powderTracker.reset()
+        profile = name
+        restoreTrackers(settings().savedTrackers[name].orEmpty())
+    }
+
+    private fun snapshotTrackers(): MutableMap<String, SavedTracker> {
+        val saved = mutableMapOf<String, SavedTracker>()
+        GrindingMaterial.entries.forEach { material ->
+            val tracker = checkNotNull(trackers[material])
+            saved[material.name] = SavedTracker(tracker.totalRaw, 0L, tracker.activeMillis)
+        }
+        saved.putAll(powderTracker.saved())
+        return saved
+    }
+
+    private fun restoreTrackers(saved: Map<String, SavedTracker>) {
+        GrindingMaterial.entries.forEach { material ->
+            saved[material.name]?.let { checkNotNull(trackers[material]).restore(it.total, it.activeMillis) }
+        }
+        powderTracker.restore(saved)
     }
 
     fun movePowder() = powderWidget.requestEditor()
