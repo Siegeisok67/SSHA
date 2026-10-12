@@ -1,7 +1,6 @@
 package dev.ssha.hotm
 
 import at.hannibal2.skyhanni.data.model.TabWidget
-import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.SkyBlockUtils
 import com.google.gson.GsonBuilder
 import com.mojang.brigadier.arguments.BoolArgumentType
@@ -14,6 +13,7 @@ import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
@@ -54,6 +54,8 @@ class HotmAddon : ClientModInitializer {
     private var pendingUpdate: PotentialUpdate? = null
     private var updateCheckInProgress = false
     private var updateInstallInProgress = false
+    private var loginUpdateChecked = false
+    private var lastKnownLatestVersion: String? = null
     private var lastRateEnabled = true
     private var commissionsWasActive = false
     // The silent-read menu after we turned to page 2 for tier 5+ XP; null until that turn happens.
@@ -125,6 +127,7 @@ class HotmAddon : ClientModInitializer {
             recordMenu(menuItems(screen))
             recordHoveredTooltip(stack.hoverName.string, tooltip.map { it.string })?.let(::applyObservation)
         }
+        ClientPlayConnectionEvents.JOIN.register { _, _, _ -> onServerJoin() }
         ClientTickEvents.END_CLIENT_TICK.register(::onClientTick)
         // Saved on quit as well as every 10 seconds, so a restart or update never loses tracker totals.
         ClientLifecycleEvents.CLIENT_STOPPING.register { AddonSettings.save() }
@@ -164,7 +167,8 @@ class HotmAddon : ClientModInitializer {
                 moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
                 resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
-                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved)
+                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved,
+                updateStatus = updateStatusText())
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
@@ -228,47 +232,88 @@ class HotmAddon : ClientModInitializer {
         if (hiddenMenu == null && autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) minecraft.player?.closeContainer()
     }
 
-    private fun checkForUpdates() {
+    /** Every login surfaces a known pending update without another network check. Only the first
+     * login per session hits the network, and it stays silent unless an update is actually found. */
+    private fun onServerJoin() {
+        pendingUpdate?.let { announcePendingUpdate(it); return }
+        if (loginUpdateChecked) return
+        loginUpdateChecked = true
+        checkForUpdates(quiet = true)
+    }
+
+    /** Red installed → green latest, mirroring SkyHanni's About page; unknown until checked. */
+    private fun updateStatusText(): String = updateStatusText(installedVersion(), lastKnownLatestVersion)
+
+    internal fun updateStatusText(installed: String, latest: String?): String {
+        latest ?: return "§7Installed: §f$installed §8— press Update to check for a newer release."
+        return if (isNewerRelease(latest, installed)) "§c$installed §7➔ §a$latest"
+        else "§a$installed §7(up to date)"
+    }
+
+    private fun checkForUpdates(quiet: Boolean = false) {
         if (updateCheckInProgress) {
-            notify("§eSSHA update check is already running.")
+            if (!quiet) notify("§eSSHA update check is already running.")
             return
         }
         val context = updateContext()
         if (context == null) {
-            notify("§eThe in-game updater requires SSHA installed as a JAR. Download updates manually from GitHub Releases.")
+            if (!quiet) notify("§eThe in-game updater requires SSHA installed as a JAR. Download updates manually from GitHub Releases.")
             return
         }
         pendingUpdate = null
         updateCheckInProgress = true
-        updateBanner.show(nowMillis(), "Checking for SSHA updates…", "Installed: ${installedVersion()}", UpdateStatusBanner.GRAY)
-        notify("§7Checking the latest stable SSHA release…")
+        if (!quiet) {
+            updateBanner.show(nowMillis(), "Checking for SSHA updates…", "Installed: ${installedVersion()}", UpdateStatusBanner.GRAY)
+            notify("§7Checking the latest stable SSHA release…")
+        }
         setUpdateConnectionTimeouts()
         val future = runCatching { context.checkUpdate("full").orTimeout(20, TimeUnit.SECONDS) }.getOrElse { failure ->
             updateCheckInProgress = false
             logger.warn("SSHA update check failed to start", failure)
-            notify("§cSSHA update check could not start. You can download releases manually from GitHub.")
+            if (!quiet) notify("§cSSHA update check could not start. You can download releases manually from GitHub.")
             return
         }
         future.whenComplete { update, error -> Minecraft.getInstance().execute {
             updateCheckInProgress = false
             if (error != null) {
                 logger.warn("SSHA update check failed", error)
-                updateBanner.show(nowMillis(), "SSHA update check failed", "Installed version unchanged. Try again later.", UpdateStatusBanner.RED)
-                notify("§cSSHA update check failed. You can download releases manually from GitHub.")
+                if (!quiet) {
+                    updateBanner.show(nowMillis(), "SSHA update check failed", "Installed version unchanged. Try again later.", UpdateStatusBanner.RED)
+                    notify("§cSSHA update check failed. You can download releases manually from GitHub.")
+                }
                 return@execute
             }
             if (update == null || !update.isUpdateAvailable) {
                 pendingUpdate = null
-                updateBanner.show(nowMillis(), "SSHA ${installedVersion()} is up to date", "No newer verified stable release.", UpdateStatusBanner.GREEN)
-                notify("§aSSHA is up to date, or no verified stable JAR release is available.")
+                lastKnownLatestVersion = installedVersion()
+                if (!quiet) {
+                    updateBanner.show(nowMillis(), "SSHA ${installedVersion()} is up to date", "No newer verified stable release.", UpdateStatusBanner.GREEN)
+                    notify("§aSSHA is up to date, or no verified stable JAR release is available.")
+                }
                 return@execute
             }
             pendingUpdate = update
-            // Check and install are one action: a verified newer release installs right away.
+            lastKnownLatestVersion = targetVersion(update)
             updateBanner.show(nowMillis(), "SSHA ${installedVersion()} → ${targetVersion(update)} available", "Downloading and verifying…", UpdateStatusBanner.YELLOW)
-            notify("§eSSHA ${targetVersion(update)} is available. Installing it now.")
-            installAvailableUpdate()
+            if (quiet) {
+                // Logins announce; they never install without being asked.
+                announcePendingUpdate(update)
+            } else {
+                // Check and install are one action: a verified newer release installs right away.
+                notify("§eSSHA ${targetVersion(update)} is available. Installing it now.")
+                installAvailableUpdate()
+            }
         } }
+    }
+
+    private fun announcePendingUpdate(update: PotentialUpdate) {
+        notify("§eSSHA ${targetVersion(update)} is available.")
+        SshaChat.clickable(
+            "§e§lClick here to install it.",
+            hover = "§eDownload and verify the release; restart Minecraft manually to finish installation.",
+            oneTimeClick = true,
+            onClick = ::installAvailableUpdate,
+        )
     }
 
     private fun installAvailableUpdate() {
@@ -305,11 +350,11 @@ class HotmAddon : ClientModInitializer {
                 pendingUpdate = null
                 updateBanner.show(nowMillis(), "SSHA ${targetVersion(update)} is ready", "Restart Minecraft to finish installing.", UpdateStatusBanner.GREEN)
                 notify("§aSSHA update downloaded and verified. Exit Minecraft to install it, then relaunch from your launcher.")
-                ChatUtils.clickableChat(
+                SshaChat.clickable(
                     "§a§lClick here to restart your game!",
-                    onClick = ::closeGameForRestart,
                     hover = "§eCloses Minecraft so the verified update can install. Relaunch from your launcher.",
                     oneTimeClick = true,
+                    onClick = ::closeGameForRestart,
                 )
             }
         } }
@@ -347,15 +392,15 @@ class HotmAddon : ClientModInitializer {
     }
 
     private fun autoReadPrompt(runAuto: () -> Unit) {
-        ChatUtils.clickableChat(
+        SshaChat.clickable(
             "§eClick to run §6/ssha auto §eand read HOTM now.",
-            onClick = runAuto,
             hover = "§7Turns automatic capture back on and reads /hotm once.",
+            onClick = runAuto,
         )
     }
 
     private fun notify(message: String) {
-        ChatUtils.chat(message)
+        SshaChat.chat(message)
     }
 
     private fun showPickaxeReset() {

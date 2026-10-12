@@ -25,11 +25,29 @@ class AboutMenuConfig internal constructor() {
 
     @JvmField
     @ConfigOption(
+        name = "Update Status",
+        desc = "Installed version against the latest known stable release. Red means outdated, green means current. Press Update to refresh.",
+    )
+    @ConfigEditorInfoText
+    var updateStatus: String = "§7Not checked yet."
+
+    @JvmField
+    @ConfigOption(
         name = "Check & Install Update",
         desc = "Check the latest stable release. If it is newer, it is downloaded and verified, then installs when Minecraft exits. Pre-releases are ignored and nothing runs in the background.",
     )
     @ConfigEditorButton(buttonText = "Update")
     val updates = Runnable { checkForUpdates() }
+
+    @JvmField
+    @ConfigOption(name = "Show Changelog", desc = "Open the latest SSHA GitHub release notes in your browser.")
+    @ConfigEditorButton(buttonText = "Changelog")
+    val changelog = Runnable { OSUtils.openBrowser(RELEASES_PAGE) }
+
+    @JvmField
+    @ConfigOption(name = "Manually download", desc = "Open the GitHub releases page to download the jar yourself.")
+    @ConfigEditorButton(buttonText = "Download")
+    val manualDownload = Runnable { OSUtils.openBrowser(RELEASES_PAGE) }
 
     @JvmField
     @ConfigOption(name = "Release Notes", desc = "Open SSHA's latest GitHub release in your browser.")
@@ -49,4 +67,5 @@ class AboutMenuConfig internal constructor() {
     private var checkForUpdates: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
 
     internal fun setUpdateAction(action: () -> Unit) { checkForUpdates = action }
+    internal fun setUpdateStatusText(text: String) { updateStatus = text }
 }

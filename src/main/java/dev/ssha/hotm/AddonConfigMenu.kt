@@ -14,7 +14,6 @@ import at.hannibal2.skyhanni.deps.moulconfig.observer.GetSetter
 import at.hannibal2.skyhanni.deps.moulconfig.observer.Property
 import at.hannibal2.skyhanni.deps.moulconfig.processor.ConfigProcessorDriver
 import at.hannibal2.skyhanni.deps.moulconfig.processor.MoulConfigProcessor
-import at.hannibal2.skyhanni.utils.ChatUtils
 import at.hannibal2.skyhanni.utils.ConfigUtils
 import com.google.gson.annotations.Expose
 
@@ -34,10 +33,11 @@ internal object AddonConfigMenu {
         resetPowder: () -> Unit,
         checkForUpdates: () -> Unit,
         resetAllGrinding: () -> Unit,
+        updateStatus: String = "",
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
-            { message -> ChatUtils.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding)
+            { message -> SshaChat.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding, updateStatus)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -60,11 +60,13 @@ class AddonMenuConfig internal constructor(
     resetPowder: () -> Unit = {},
     checkForUpdates: () -> Unit = {},
     resetAllGrinding: () -> Unit = {},
+    updateStatus: String = "",
 ) : Config() {
     @Expose @JvmField
     @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
     val about = AboutMenuConfig().apply {
         setUpdateAction(checkForUpdates)
+        setUpdateStatusText(updateStatus)
     }
 
     @Expose @JvmField

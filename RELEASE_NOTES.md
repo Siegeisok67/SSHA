@@ -1,3 +1,21 @@
+# SSHA 1.4.7 — SkyHanni-style updates, login notices, SSHA chat sender
+
+- **Update section like SkyHanni's About page.** The About category shows an Update Status row (red installed `➔` green latest once checked), plus Check & Install Update, Show Changelog and Manually download buttons.
+- **Login update notices.** The first login per session quietly checks for a newer stable release and only speaks up when one is found, with a click-to-install prompt. Logins never install without being asked; later logins re-announce a known pending update without another network check.
+- **SSHA chat sender.** All SSHA messages now arrive under a purple-gradient SSHA tag instead of SkyHanni's gold sender.
+
+## Release artifact
+
+`build/libs/ssha_1.4.7.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The new About rows, the login check, click-to-install from chat, and the gradient tag still need in-game verification. While the Blue Goblin Egg buff is active the displayed tier can read one high, because menu text carries no color codes. Live Hypixel packets and Skyblocker mixin compatibility are untested here.
+
+---
+
 # SSHA 1.4.4 — Stored prefers opened sacks, XP left survives tier disagreements
 
 - **Stored (known) follows opened sacks again.** Freshly opened sack lore is server ground truth and wins over SkyHanni's cached sack API value, which could hold a stale amount from login. The API still covers wiped or never-opened sacks. Opening a sack also pushes Stored immediately, even outside mining areas.

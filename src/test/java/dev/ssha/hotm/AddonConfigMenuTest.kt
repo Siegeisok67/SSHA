@@ -6,6 +6,22 @@ import org.junit.jupiter.api.Test
 
 class AddonConfigMenuTest {
     @Test
+    fun `chat sender is a purple gradient SSHA tag never SkyHanni`() {
+        assertFalse(SshaChat.PREFIX.contains("SkyHanni"))
+        assertTrue(SshaChat.PREFIX.startsWith("§5["))
+        assertTrue(SshaChat.PREFIX.contains("§d"))
+        assertEquals("SSHA", SshaChat.PREFIX.replace(Regex("§."), "").trim().removeSurrounding("[", "]"))
+    }
+
+    @Test
+    fun `update status shows red-to-green versions once checked`() {
+        val addon = HotmAddon()
+        assertTrue(addon.updateStatusText("1.4.4", null).contains("press Update"))
+        assertEquals("§c1.4.4 §7➔ §a1.4.7", addon.updateStatusText("1.4.4", "1.4.7"))
+        assertEquals("§a1.4.4 §7(up to date)", addon.updateStatusText("1.4.4", "1.4.4"))
+    }
+
+    @Test
     fun `menu toggles apply fields and buttons invoke the intended actions`() {
         val settings = AddonSettingsData(hotmTier = 6, xpToNextTier = 138_000L, extraEventXp = 50L)
         var saves = 0
@@ -100,7 +116,7 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
-        listOf("intro", "updates", "releaseNotes", "source", "issues").forEach { field ->
+        listOf("intro", "updateStatus", "updates", "changelog", "manualDownload", "releaseNotes", "source", "issues").forEach { field ->
             val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
             assertNotNull(option, "About $field")
             assertNotNull(checkNotNull(option).editor)
