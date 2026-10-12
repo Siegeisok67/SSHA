@@ -30,6 +30,21 @@ class MiningRegressionTest {
     }
 
     @Test
+    fun `fresh sack lore beats cached api values and api covers missing lore`() {
+        // A just-opened sack is ground truth; a stale cached API value must not shadow it.
+        assertEquals(5_000L, GrindingIntegration.resolveStoredAmount(5_000L, 3_000L))
+        assertEquals(3_000L, GrindingIntegration.resolveStoredAmount(null, 3_000L))
+        assertNull(GrindingIntegration.resolveStoredAmount(null, null))
+        val tracker = GrindingTracker(GrindingMaterial.MITHRIL)
+        tracker.stored(
+            GrindingIntegration.resolveStoredAmount(5_000L, 3_000L),
+            GrindingIntegration.resolveStoredAmount(null, 320L),
+            GrindingIntegration.resolveStoredAmount(null, null),
+        )
+        assertEquals(5_000L + 320L * 160L, tracker.storedRaw)
+    }
+
+    @Test
     fun `overflow warns once at capacity rearms and respects toggle`() {
         val sacks = SackSnapshot()
         sacks.read("MITHRIL_ORE", listOf("Stored: 221,799/221.8k"))

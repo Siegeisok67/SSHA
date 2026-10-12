@@ -543,6 +543,20 @@ class HotmAddon : ClientModInitializer {
                 },
         )
         command.then(
+            LiteralArgumentBuilder.literal<FabricClientCommandSource>("sacks")
+                .executes { context ->
+                    if (!::grindingIntegration.isInitialized) {
+                        context.source.sendFeedback(Component.literal("§eGrinding trackers are not ready yet."))
+                    } else {
+                        context.source.sendFeedback(Component.literal("§6[SSHA] Sack state (copy these lines for diagnostics):"))
+                        grindingIntegration.sackDiagnostics().forEach { line ->
+                            context.source.sendFeedback(Component.literal(line))
+                        }
+                    }
+                    1
+                },
+        )
+        command.then(
             LiteralArgumentBuilder.literal<FabricClientCommandSource>("gui")
                 .executes {
                     openGui()

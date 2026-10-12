@@ -97,11 +97,10 @@ internal class GrindingIntegration(
             powderAccounting.reset()
         }
         profileReadyPrevious = profileReady
-        val amounts = if (snapshot && profileReady) SackApi.sackData.entries.associate { (id, item) ->
-            id.asString() to item.amount.toLong().takeIf { item.statusIsCorrectOrAlright() }
-        } else emptyMap()
         if (snapshot) lastSnapshotAt = time
         if (warningSnapshot) lastWarningSnapshotAt = time
+        // Stored refreshes on the snapshot cadence while mining; sack opens refresh it immediately (see readSack).
+        if (snapshot) refreshStored()
         GrindingMaterial.entries.forEach { material ->
             val config = settings().grinding[material]
             val tracker = checkNotNull(trackers[material])
@@ -109,12 +108,6 @@ internal class GrindingIntegration(
             if (enabled[material] != trackerEnabled || (!active && inSkyblock)) tracker.suspend(time)
             enabled[material] = trackerEnabled
             if (active && trackerEnabled) tracker.tick(time)
-            // SkyHanni's sack API updates on every server change; lore deltas drift between sack opens.
-            if (snapshot && (trackerEnabled || tracker.storedRaw != null)) tracker.stored(
-                amounts[material.rawId] ?: sacks[material.rawId]?.amount,
-                material.enchantedId?.let { amounts[it] ?: sacks[it]?.amount },
-                amounts[material.enchantingId] ?: sacks[material.enchantingId]?.amount, config.compactAt,
-            )
             val committedAt = tracker.latestCommittedAt
             val eligible = warningSnapshot && active
             if (config.compactPopup && tracker.shouldWarn(config, eligible)) {
@@ -273,8 +266,52 @@ internal class GrindingIntegration(
         val items = event.inventoryItems.values.toList()
         Minecraft.getInstance().execute {
             items.forEach { item -> sacks.read(item.getInternalName().asString(), item.getCleanLore()) }
+            // Show what is actually in the sacks right away, even outside mining areas.
+            refreshStored()
             lastSnapshotAt = Long.MIN_VALUE
             lastWarningSnapshotAt = Long.MIN_VALUE
+        }
+    }
+
+    /**
+     * Pushes known sack contents into Stored. Freshly opened sack lore is server ground
+     * truth and wins over the API, which can hold a cached value (loaded at login) until
+     * SkyHanni processes the next sack open. The API still covers wiped or never-opened sacks.
+     */
+    private fun refreshStored() {
+        GrindingMaterial.entries.forEach { material ->
+            val config = settings().grinding[material]
+            val tracker = checkNotNull(trackers[material])
+            if (!config.enabled && !config.compactPopup && tracker.storedRaw == null) return@forEach
+            tracker.stored(
+                resolveStoredAmount(sacks[material.rawId]?.amount, apiAmount(material.rawId)),
+                material.enchantedId?.let { resolveStoredAmount(sacks[it]?.amount, apiAmount(it)) },
+                resolveStoredAmount(sacks[material.enchantingId]?.amount, apiAmount(material.enchantingId)),
+                config.compactAt,
+            )
+        }
+    }
+
+    private fun apiAmount(id: String): Long? {
+        if (ProfileStorageData.sackProfiles == null) return null
+        return SackApi.sackData[id.toInternalName()]?.takeIf { it.statusIsCorrectOrAlright() }?.amount?.toLong()
+    }
+
+    /** Diagnostic lines for /ssha sacks: copy-paste friendly sack state per material. */
+    fun sackDiagnostics(): List<String> = buildList {
+        val ready = ProfileStorageData.sackProfiles != null
+        add("profile=${profile ?: "none"} sackStorage=${if (ready) "ready" else "NOT READY"} " +
+            "island=${SkyBlockUtils.currentIsland} area=${SkyBlockUtils.graphArea} miningArea=${MiningArea.current()}")
+        GrindingMaterial.entries.forEach { material ->
+            val tracker = checkNotNull(trackers[material])
+            fun api(id: String): String {
+                if (!ready) return "n/a"
+                val item = SackApi.sackData[id.toInternalName()] ?: return "missing"
+                return "${item.amount}(${item.getStatus()})"
+            }
+            fun lore(id: String): String = sacks[id]?.let { "${it.amount}/${it.limit}" } ?: "-"
+            add("${material.displayName}: apiRaw=${api(material.rawId)} loreRaw=${lore(material.rawId)} " +
+                "stored=${tracker.storedRaw ?: "?"} session=${tracker.totalRaw}")
         }
     }
 
@@ -396,6 +433,8 @@ internal class GrindingIntegration(
 
     private enum class GrindingTitle { COMPACT }
     companion object {
+        /** Freshly read sack lore beats a possibly cached API value; the API covers missing lore. */
+        internal fun resolveStoredAmount(loreAmount: Long?, apiAmount: Long?): Long? = loreAmount ?: apiAmount
         internal fun jewelIsland(island: IslandType): Boolean = island == IslandType.MINESHAFT || island == IslandType.DWARVEN_MINES
         private val miningMaterialIds = setOf(
             "MITHRIL_ORE", "ENCHANTED_MITHRIL", "TITANIUM_ORE", "ENCHANTED_TITANIUM",
