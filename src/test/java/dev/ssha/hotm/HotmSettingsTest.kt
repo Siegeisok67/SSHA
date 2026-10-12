@@ -189,6 +189,23 @@ class HotmSettingsTest {
         settings.applyAutomaticObservation(HotmProgress.Observation(null, 120_000L), 4_000L)
         assertEquals(0L, settings.extraEventXp)
         settings.applyAutomaticObservation(HotmProgress.Observation(8, null), 5_000L)
-        assertEquals(null, settings.xpToNextTier)
+        assertEquals(8, settings.hotmTier)
+        assertEquals(120_000L, settings.xpToNextTier)
+    }
+
+    @Test
+    fun `tier-only page disagreements never reset captured XP left`() {
+        // Silent reads alternate tier-only page 1 with XP-bearing page 2; pages can briefly
+        // disagree (display buffs, layout differences), and that must not revert XP left.
+        val settings = AddonSettingsData(hotmTier = 7, xpToNextTier = 140_000L)
+        settings.applyAutomaticObservation(HotmProgress.Observation(8, null), 1_000L)
+        assertEquals(8, settings.hotmTier)
+        assertEquals(140_000L, settings.xpToNextTier)
+        settings.applyAutomaticObservation(HotmProgress.Observation(7, 139_000L), 2_000L)
+        assertEquals(7, settings.hotmTier)
+        assertEquals(139_000L, settings.xpToNextTier)
+        settings.applyAutomaticObservation(HotmProgress.Observation(7, null), 3_000L)
+        assertEquals(7, settings.hotmTier)
+        assertEquals(139_000L, settings.xpToNextTier)
     }
 }

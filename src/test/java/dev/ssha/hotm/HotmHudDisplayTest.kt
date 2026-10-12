@@ -56,7 +56,7 @@ class HotmHudDisplayTest {
 
     @Test
     fun `missing XP and max tier remain clear without misleading commission estimates`() {
-        assertEquals(listOf("§e§lHOTM:", " §7Open §e/hotm §7to capture XP"), HotmHudDisplay.lines(AddonSettingsData()).map { it.string })
+        assertEquals(listOf("§e§lHOTM:", " §7Open §e/hotm §7or use §e'/ssha auto' §7to capture XP"), HotmHudDisplay.lines(AddonSettingsData()).map { it.string })
         val max = HotmHudDisplay.lines(AddonSettingsData(hotmTier = 10, xpToNextTier = 0L)).map { it.string }
         assertEquals(listOf("§e§lHOTM:", " §fTier: §a10 §7(Max)", " §aMax tier reached!"), max)
         val threshold = HotmHudDisplay.lines(AddonSettingsData(hotmTier = 5, xpToNextTier = 0L)).map { it.string }

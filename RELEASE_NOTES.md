@@ -1,3 +1,21 @@
+# SSHA 1.4.4 — Stored prefers opened sacks, XP left survives tier disagreements
+
+- **Stored (known) follows opened sacks again.** Freshly opened sack lore is server ground truth and wins over SkyHanni's cached sack API value, which could hold a stale amount from login. The API still covers wiped or never-opened sacks. Opening a sack also pushes Stored immediately, even outside mining areas.
+- **XP left no longer reverts to the capture prompt.** A tier-only page disagreeing with the known tier (display buffs, layout differences between page 1 and page 2) adopts the tier but keeps the captured XP; XP is only overwritten by reads that actually carry XP. The prompt now reads **Open /hotm or use '/ssha auto' to capture XP**.
+- **New `/ssha sacks` diagnostics** print profile, sack storage status, area, and per-material API status, lore, stored and session values for copy-paste reports.
+
+## Release artifact
+
+`build/libs/ssha_1.4.4.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The silent-read hiding, the right-click page turn, quit-time persistence, HUD appearance and sack numbers still need in-game verification. While the Blue Goblin Egg buff is active the displayed tier can read one high, because menu text carries no color codes. Live Hypixel packets and Skyblocker mixin compatibility are untested here.
+
+---
+
 # SSHA 1.4.2 — HOTM tier read from the core item, per-profile grinding totals
 
 - **HOTM tier past 6 fixed.** The tier now comes from the Heart of the Mountain item's `Level N/10` lore line, the same source SkyHanni uses, instead of tier-row names. Silent `/hotm` reads finish on page 1 at tier 4 or below with no click; at tier 5+ they right-click Next Page only when the XP line is still missing. `/ssha auto` stays nearly invisible via the existing menu-hiding mixin.

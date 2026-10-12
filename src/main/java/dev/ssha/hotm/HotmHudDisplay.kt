@@ -25,7 +25,7 @@ internal object HotmHudDisplay {
         } else {
             val xp = settings.xpToNextTier
             if (xp == null) {
-                row(" §7Open §e/hotm §7to capture XP")
+                row(" §7Open §e/hotm §7or use §e'/ssha auto' §7to capture XP")
             } else {
                 row(" §fXP left: §b${xp.prettyNumber()}")
                 HotmProgress.commissionsRemaining(xp, settings.commissionXp)?.let { count ->

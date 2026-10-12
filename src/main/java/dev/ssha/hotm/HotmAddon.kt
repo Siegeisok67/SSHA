@@ -676,8 +676,10 @@ internal data class AddonSettingsData(
         if (manualProgress) return false
         val previous = HotmProgress.Observation(hotmTier, xpToNextTier)
         if (observation.tier != null && observation.tier != hotmTier) {
-            // A new tier invalidates the old XP sample; never combine different tiers.
-            xpToNextTier = null
+            // Adopt the new tier, but never discard a known XP sample for a tier-only
+            // disagreement: page 1 and page 2 can briefly disagree (display buffs, layout
+            // differences), and nuking here is what reset XP left back to the capture prompt.
+            // A real tier-up is corrected as soon as an XP-bearing read arrives.
             clearPendingCommissions()
         }
         // Menu deltas cannot reliably distinguish base rewards, daily bonuses, and events.
