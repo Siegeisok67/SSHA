@@ -5,7 +5,7 @@ package dev.ssha.hotm
  * A request never sends while another GUI is open, so a commission menu is not interrupted.
  */
 internal class AutoHotmRefresh(
-    private val minIntervalMs: Long = 10_000L,
+    private val minIntervalMs: Long = 3_000L,
     private val readTimeoutMs: Long = 5_000L,
     private val staleMs: Long = 60_000L,
 ) {
@@ -57,6 +57,9 @@ internal class AutoHotmRefresh(
         awaitingSince = null
         return true
     }
+
+    /** True while a read we sent is still waiting for its menu. */
+    fun awaitingMenu(): Boolean = awaitingSince != null
 
     /** Stop waiting for a menu that never opened. */
     fun expire(now: Long) {

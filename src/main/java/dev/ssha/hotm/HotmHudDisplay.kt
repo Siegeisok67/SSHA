@@ -52,9 +52,8 @@ internal object HotmHudDisplay {
 
         val activeRows = commissionWidget.filter { component ->
             val text = component.string.replace(Regex("§."), "").trim()
-            val progress = text.substringAfter(':', "")
-            text.contains(':') && !text.substringBefore(':').equals("Commissions", ignoreCase = true) &&
-                !progress.contains("DONE", ignoreCase = true) && !progress.contains("COMPLETE", ignoreCase = true)
+            // Finished rows stay listed; HotmHudPanel draws them as green "Completed!".
+            text.contains(':') && !text.substringBefore(':').equals("Commissions", ignoreCase = true)
         }
         if (activeRows.isNotEmpty()) {
             // Keep the server/SkyHanni colors, indentation, and Component styles intact.

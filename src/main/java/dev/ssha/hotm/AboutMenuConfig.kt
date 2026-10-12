@@ -1,6 +1,7 @@
 package dev.ssha.hotm
 
 import at.hannibal2.skyhanni.deps.moulconfig.annotations.ConfigEditorButton
+import at.hannibal2.skyhanni.deps.moulconfig.annotations.ConfigEditorInfoText
 import at.hannibal2.skyhanni.deps.moulconfig.annotations.ConfigOption
 import at.hannibal2.skyhanni.utils.OSUtils
 import net.fabricmc.loader.api.FabricLoader
@@ -9,33 +10,49 @@ internal fun installedVersion(): String = FabricLoader.getInstance().getModConta
     .map { it.metadata.version.friendlyString }.orElse("development")
 
 internal const val RELEASES_PAGE = "https://github.com/Siegeisok67/SSHA/releases/latest"
+internal const val SOURCE_PAGE = "https://github.com/Siegeisok67/SSHA"
+internal const val ISSUES_PAGE = "https://github.com/Siegeisok67/SSHA/issues"
 
+/** About actions shown directly in the About category. The installed version is in the menu title. */
 class AboutMenuConfig internal constructor() {
-    @JvmField @ConfigOption(name = "Current Version", desc = "Installed version is shown in the menu title. Independent Siege's SkyHanni Addons; not an official SkyHanni or Skyblocker release.")
-    @ConfigEditorButton(buttonText = "Releases")
-    val version = Runnable { OSUtils.openBrowser("https://github.com/Siegeisok67/SSHA/releases") }
+    @JvmField
+    @ConfigOption(
+        name = "About SSHA",
+        desc = "Siege's SkyHanni Addons. Independent of SkyHanni and Skyblocker; your installed version is shown in the menu title.",
+    )
+    @ConfigEditorInfoText
+    val intro: String = ""
 
-    @JvmField @ConfigOption(name = "Check for Updates", desc = "Check the latest stable SSHA release. When a newer version is available, install it and restart Minecraft manually.")
+    @JvmField
+    @ConfigOption(name = "Check for Updates", desc = "Look for a newer stable release. Pre-releases are ignored and nothing runs in the background.")
     @ConfigEditorButton(buttonText = "Check")
     val updates = Runnable { checkForUpdates() }
+
+    @JvmField
+    @ConfigOption(name = "Install Update", desc = "Download and verify the checked release. It installs when Minecraft exits; relaunch from your launcher afterwards.")
+    @ConfigEditorButton(buttonText = "Install")
+    val installUpdate = Runnable { installAvailableUpdate() }
+
+    @JvmField
+    @ConfigOption(name = "Release Notes", desc = "Open SSHA's latest GitHub release in your browser.")
+    @ConfigEditorButton(buttonText = "Notes")
+    val releaseNotes = Runnable { OSUtils.openBrowser(RELEASES_PAGE) }
+
+    @JvmField
+    @ConfigOption(name = "Source Code", desc = "Open the SSHA repository on GitHub.")
+    @ConfigEditorButton(buttonText = "Source")
+    val source = Runnable { OSUtils.openBrowser(SOURCE_PAGE) }
+
+    @JvmField
+    @ConfigOption(name = "Feedback & Bugs", desc = "Report bugs with your version and a screenshot.")
+    @ConfigEditorButton(buttonText = "Issues")
+    val issues = Runnable { OSUtils.openBrowser(ISSUES_PAGE) }
 
     private var checkForUpdates: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
 
     internal fun setUpdateAction(action: () -> Unit) { checkForUpdates = action }
 
-    @JvmField @ConfigOption(name = "Install Update", desc = "Download and verify the latest stable release. The replacement is installed when Minecraft exits; then relaunch your game from its launcher.")
-    @ConfigEditorButton(buttonText = "Install")
-    val installUpdate = Runnable { installAvailableUpdate() }
-
     private var installAvailableUpdate: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
 
     internal fun setInstallAction(action: () -> Unit) { installAvailableUpdate = action }
-
-    @JvmField @ConfigOption(name = "Credits", desc = "Created by Siege (Siegeisok67). SkyHanni provides event APIs and MoulConfig. Skyblocker inspired the compact teal HUD. SkyOcean inspired the sack-value workflow. Their source/assets are not bundled.")
-    @ConfigEditorButton(buttonText = "Source")
-    val source = Runnable { OSUtils.openBrowser("https://github.com/Siegeisok67/SSHA") }
-
-    @JvmField @ConfigOption(name = "Feedback & Bugs", desc = "Report issues with your Minecraft, SSHA and SkyHanni versions and relevant screenshots. Do not include tokens or private logs.")
-    @ConfigEditorButton(buttonText = "Issues")
-    val issues = Runnable { OSUtils.openBrowser("https://github.com/Siegeisok67/SSHA/issues") }
 }

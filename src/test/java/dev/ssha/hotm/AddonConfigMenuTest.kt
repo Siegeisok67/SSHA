@@ -57,7 +57,7 @@ class AddonConfigMenuTest {
     }
 
     @Test
-    fun `about update buttons use the injected stable check and install actions`() {
+    fun `about actions run inline through the injected update check and install`() {
         var checks = 0
         var installs = 0
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {},
@@ -95,7 +95,7 @@ class AddonConfigMenuTest {
         val config = AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {})
         val processor = config.createProcessor()
         assertTrue(processor.isFinalized)
-        listOf("version", "updates", "installUpdate", "source", "issues").forEach { field ->
+        listOf("intro", "updates", "installUpdate", "releaseNotes", "source", "issues").forEach { field ->
             val option = processor.getOptionFromField(AboutMenuConfig::class.java.getField(field))
             assertNotNull(option, "About $field")
             assertNotNull(checkNotNull(option).editor)

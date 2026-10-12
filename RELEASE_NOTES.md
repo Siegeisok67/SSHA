@@ -1,3 +1,27 @@
+# SSHA 1.4.1 — About in settings, saved session stats, silent /hotm reads
+
+- **About in settings.** The About category shows the stable-release check, install, release notes, source and issue links directly, with no extra page.
+- **Silent /hotm reads.** Commission claims, reward chat and `/ssha auto` read `/hotm` without showing the menu, then close it. At tier 5+ the XP is on page 2, so a silent read now turns the page to get it; this restores XP and commissions-left updates after a claim. A HOTM menu you open during a pending read is also hidden.
+- **Session stats persist.** Commission totals, Avg. Commissions/h and Avg. HOTM XP/h are saved and restored across restarts and updates. Saves run every 10 seconds, so up to 10 seconds of activity can be lost on quit.
+- **Pickaxe Ability Reminder** fires on Hypixel readiness messages (for example `Pickobulus is now available!`), not only after you use an ability. Repeats within 5 seconds are suppressed.
+- **Avg. HOTM XP/h** no longer drops while the commission timer is paused.
+- **Finished commissions** stay listed as a green **Completed!** row instead of disappearing.
+- **Compact, more transparent widgets.** The commission ETA holds its estimate until progress changes, then counts down.
+- **Faster updates.** The `/hotm` refresh throttle is 3 seconds (was 10), and commission and reward refreshes fire within 0.5 seconds.
+- A completed update download shows a clickable **Click here to restart your game!** message that closes Minecraft.
+
+## Release artifact
+
+`build/libs/ssha_1.4.1.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+Silent-read hiding, quit-time persistence, pickaxe readiness message matching, HUD appearance, the page-2 turn on a real Hypixel menu and the About buttons still need in-game verification. Live Hypixel packets and Skyblocker mixin compatibility are untested here.
+
+---
+
 # SSHA 1.3.2 — Auto /hotm refresh, pickaxe ready banner, named compact popups
 
 - Default-off **Pickaxe Ability Ready Banner** shows a small green **Pickaxe Ability Ready** banner once when the ability becomes available, on an availability/ready message (e.g. `Mining Speed Boost is now available!`) or on an explicit reset message. Not a countdown; does not announce from an estimated timer alone.

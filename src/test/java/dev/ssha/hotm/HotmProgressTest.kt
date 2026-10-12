@@ -1,7 +1,9 @@
 package dev.ssha.hotm
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class HotmProgressTest {
@@ -75,6 +77,24 @@ class HotmProgressTest {
         assertEquals(1L, HotmProgress.commissionsRemaining(1L, 750L))
         assertEquals(0L, HotmProgress.commissionsRemaining(0L, 750L))
         assertEquals(null, HotmProgress.commissionsRemaining(1L, 0L))
+    }
+
+    @Test
+    fun `silent reads turn to page 2 only when tier 5 or higher shows no XP`() {
+        assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(5, null)))
+        assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(10, null)))
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(4, null)))
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(6, 138_000L)))
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(null, null)))
+        assertFalse(HotmProgress.needsSecondPageForXp(null))
+    }
+
+    @Test
+    fun `page turn arrow is matched by its Next Page name only`() {
+        assertTrue(HotmProgress.isNextPageItemName("§aNext Page"))
+        assertTrue(HotmProgress.isNextPageItemName("§aNext Page →"))
+        assertFalse(HotmProgress.isNextPageItemName("§a← Previous Page"))
+        assertFalse(HotmProgress.isNextPageItemName("Heart of the Mountain"))
     }
 
     @Test

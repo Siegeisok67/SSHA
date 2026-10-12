@@ -64,6 +64,7 @@ class HotmSettingsTest {
             saveSettings = { file.writeText(gson.toJson(settings)) },
             openGui = { guiRequests++ },
             openSettings = { settingsRequests++ },
+            offerAutoRead = { },
         ))
         assertEquals(1, dispatcher.execute("ssha set progress 6 12000", source))
         assertTrue(messages.any { it.contains("HotM 6") && it.contains("138,000 XP") && it.contains("184 commissions") })

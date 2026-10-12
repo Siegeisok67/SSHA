@@ -5,6 +5,7 @@ import net.minecraft.network.chat.Component
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class HotmHudDisplayTest {
@@ -36,7 +37,9 @@ class HotmHudDisplayTest {
         assertSame(header, rows[2])
         assertSame(active, rows[3])
         assertSame(other, rows[4])
-        assertEquals(5, rows.size)
+        assertEquals(7, rows.size)
+        assertSame(done, rows[5])
+        assertSame(complete, rows[6])
         assertEquals(active.siblings.single().style, rows[3].siblings.single().style)
     }
 
@@ -84,9 +87,10 @@ class HotmHudDisplayTest {
     }
 
     @Test
-    fun `finished live widget rows do not revive stale saved commissions`() {
+    fun `finished live widget rows stay listed and never revive stale saved commissions`() {
         val settings = AddonSettingsData(activeCommissions = listOf("Mithril Miner: 12%"))
         val rows = HotmHudDisplay.lines(settings, listOf(Component.literal("Commissions:"), Component.literal("Mithril Miner: DONE")))
-        assertFalse(rows.any { it.string.contains("Mithril Miner") || it.string.contains("Commissions:") })
+        assertTrue(rows.any { it.string.contains("Mithril Miner: DONE") })
+        assertFalse(rows.any { it.string.contains("12%") })
     }
 }

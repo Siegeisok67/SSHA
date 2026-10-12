@@ -92,6 +92,17 @@ class CommissionRateTrackerTest {
     }
 
     @Test
+    fun `estimate holds until progress changes then counts down with active time`() {
+        val tracker = CommissionRateTracker()
+        tracker.observe(listOf("Mithril Miner: 0%"), 0L)
+        tracker.observe(listOf("Mithril Miner: 1%"), 1_000L)
+        for (second in 11..61 step 10) tracker.observe(listOf("Mithril Miner: ${second}%"), second * 1_000L)
+        assertEquals("~0m 38s", tracker.estimates()["MITHRIL MINER"])
+        tracker.tick(65_000L)
+        assertEquals("~0m 34s", tracker.estimates()["MITHRIL MINER"])
+    }
+
+    @Test
     fun `disconnect excludes offline time and reset clears entire session`() {
         val tracker = CommissionRateTracker()
         tracker.completionMessage("Mithril Miner Commission Complete!", 0L)

@@ -23,19 +23,32 @@ internal class CommissionRateTracker {
     private val etaWork = mutableMapOf<String, Double>()
     private val latestFraction = mutableMapOf<String, Double>()
     private val lastProgressAt = mutableMapOf<String, Long>()
+    // Estimate frozen at its last progress update: (seconds, active time then, attempt start).
+    private val etaSnapshot = mutableMapOf<String, Triple<Long, Long, Long>>()
     private var nowMillis = 0L
 
     fun estimates(): Map<String, String> = previousRows.keys.associateWith { name ->
-        val elapsed = activeMillis - (etaStart[name] ?: activeMillis)
-        val gained = etaWork[name] ?: 0.0
-        val fraction = latestFraction[name]
+        val snapshot = etaSnapshot[name]
         val sinceProgress = nowMillis - (lastProgressAt[name] ?: nowMillis)
-        if (elapsed < 10_000L || gained <= 0.0 || fraction == null || sinceProgress >= IDLE_TIMEOUT_MS) "Collecting…"
+        if (snapshot == null || snapshot.third != etaStart[name] || sinceProgress >= IDLE_TIMEOUT_MS) "Collecting…"
         else {
-            val seconds = ((1.0 - fraction).coerceAtLeast(0.0) * elapsed / gained / 1_000.0).toLong()
+            // Holds the estimate until progress changes it, then counts down with active time.
+            val seconds = (snapshot.first - (activeMillis - snapshot.second) / 1_000L).coerceAtLeast(0L)
             if (seconds >= 3_600L) String.format(Locale.US, "~%dh %02dm", seconds / 3_600, seconds / 60 % 60)
             else String.format(Locale.US, "~%dm %02ds", seconds / 60, seconds % 60)
         }
+    }
+
+    private fun refreshEta(name: String) {
+        val elapsed = activeMillis - (etaStart[name] ?: activeMillis)
+        val gained = etaWork[name] ?: 0.0
+        val fraction = latestFraction[name]
+        if (elapsed < 10_000L || gained <= 0.0 || fraction == null) {
+            etaSnapshot.remove(name)
+            return
+        }
+        val seconds = ((1.0 - fraction).coerceAtLeast(0.0) * elapsed / gained / 1_000.0).toLong()
+        etaSnapshot[name] = Triple(seconds, activeMillis, etaStart[name] ?: activeMillis)
     }
 
     fun tick(now: Long) {
@@ -135,6 +148,7 @@ internal class CommissionRateTracker {
                     attemptProgress[name] = updatedWork
                     progress(now)
                     lastProgressAt[name] = now
+                    refreshEta(name)
                     smoothed.update(observedWork, activeMillis)
                 }
             }
@@ -168,6 +182,13 @@ internal class CommissionRateTracker {
         previousRows = emptyMap()
     }
 
+    fun restore(completed: Long, activeMillis: Long, observedWork: Double) {
+        this.completed = completed
+        this.activeMillis = activeMillis
+        this.observedWork = observedWork
+        smoothed.reset()
+    }
+
     fun reset() {
         completed = 0L
         activeMillis = 0L
@@ -184,6 +205,7 @@ internal class CommissionRateTracker {
         etaWork.clear()
         latestFraction.clear()
         lastProgressAt.clear()
+        etaSnapshot.clear()
         nowMillis = 0L
     }
 

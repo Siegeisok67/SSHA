@@ -8,6 +8,7 @@ internal class PickaxeResetTracker {
         private set
     var observedCooldownMillis: Long? = null
         private set
+    private var lastNotifyAt: Long? = null
 
     fun observe(rows: List<String>, now: Long): Boolean {
         val row = rows.map { it.replace(Regex("§."), "").trim() }.firstOrNull {
@@ -38,20 +39,31 @@ internal class PickaxeResetTracker {
         }
         // Hypixel sends readiness as "Mining Speed Boost is now available!" (no "Your" or "Pickaxe Ability" wrapper).
         if (Regex("(?i)^(?:Your )?(?:(?:Mining Speed Boost|Pickobulus|Gemstone Infusion|Maniac Miner|Vein Seeker)(?: Pickaxe Ability)?|Pickaxe Ability) (?:is (?:now )?(?:available|ready)|(?:has been |was )reset)[!.]$").matches(text)) {
-            return ready(now)
+            return notifyReady(now)
         }
         return false
     }
 
+    // Chat readiness always notifies, even when the use message was missed; repeats within 5 s are suppressed.
+    private fun notifyReady(now: Long): Boolean {
+        val fresh = lastNotifyAt?.let { now - it > 5_000L } ?: true
+        ready(now)
+        if (fresh) lastNotifyAt = now
+        return fresh
+    }
+
     private fun ready(now: Long): Boolean {
         val notify = cooling
-        if (notify) usedAt?.let { observedCooldownMillis = (now - it).coerceAtLeast(0L) }
+        if (notify) {
+            usedAt?.let { observedCooldownMillis = (now - it).coerceAtLeast(0L) }
+            lastNotifyAt = now
+        }
         cooling = false
         usedAt = null
         readyAt = now
         return notify
     }
-    fun reset() { cooling = false; ability = null; usedAt = null; readyAt = null; observedCooldownMillis = null }
+    fun reset() { cooling = false; ability = null; usedAt = null; readyAt = null; observedCooldownMillis = null; lastNotifyAt = null }
 
     companion object {
         private val abilities = setOf("Mining Speed Boost", "Pickobulus", "Gemstone Infusion", "Maniac Miner", "Vein Seeker")

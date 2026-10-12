@@ -8,7 +8,7 @@ import java.util.Locale
 /** Independent panel renderer inspired by Skyblocker's Commissions widget; no Skyblocker code/assets are bundled. */
 internal object HotmHudPanel {
     const val ACCENT = 0xFF00AAAA.toInt()
-    const val BACKGROUND = 0xBF000000.toInt()
+    const val BACKGROUND = 0x66000000.toInt()
     private const val WHITE = 0xFFFFFFFF.toInt()
 
     data class Commission(val name: String, val progress: String, val percent: Double?)
@@ -48,6 +48,9 @@ internal object HotmHudPanel {
         val title = Component.literal((if (commissions.isEmpty()) "HOTM" else "HOTM & Commissions") + manual)
             .withStyle(ChatFormatting.BOLD)
         fun description(commission: Commission): String {
+            if (commission.progress.equals("DONE", ignoreCase = true) || commission.progress.equals("COMPLETE", ignoreCase = true)) {
+                return commission.name + " §aCompleted!"
+            }
             val percent = commission.percent?.let { String.format(Locale.US, "%.1f%%", it) } ?: commission.progress
             val eta = estimates[commission.name.uppercase(Locale.ROOT)]
             return commission.name + " §7$percent" + (eta?.let { " §8($it)" } ?: "")
@@ -58,11 +61,11 @@ internal object HotmHudPanel {
             (summary.maxOfOrNull(measure) ?: 0) + 12,
             (commissions.maxOfOrNull { measure(Component.literal(description(it))) } ?: 0) + 12,
         )
-        val contentTop = lineHeight + 5
-        val summaryHeight = summary.size * (lineHeight + 2)
-        val separatorHeight = if (commissions.isEmpty()) 0 else 6
-        val commissionHeight = lineHeight + 1
-        val height = contentTop + summaryHeight + separatorHeight + commissions.size * commissionHeight + 5
+        val contentTop = lineHeight + 4
+        val summaryHeight = summary.size * (lineHeight + 1)
+        val separatorHeight = if (commissions.isEmpty()) 0 else 4
+        val commissionHeight = lineHeight
+        val height = contentTop + summaryHeight + separatorHeight + commissions.size * commissionHeight + 4
         val operations = mutableListOf<Operation>()
         // One-pixel inset corners and a title cut-out on the top border.
         operations.add(Operation.Fill(1, 0, width - 2, height, BACKGROUND))
@@ -79,7 +82,7 @@ internal object HotmHudPanel {
         var y = contentTop
         summary.forEach {
             operations.add(Operation.Text(it, 6, y, WHITE))
-            y += lineHeight + 2
+            y += lineHeight + 1
         }
         if (commissions.isNotEmpty()) {
             operations.add(Operation.Fill(6, y + 1, width - 12, 1, 0x5500AAAA))
@@ -96,7 +99,7 @@ internal object HotmHudPanel {
         val title = Component.literal("Commissions").withStyle(ChatFormatting.BOLD)
         val renderedRows = rows.map { Component.literal("${it.name} §7${it.percent}") }
         val width = maxOf(measure(title) + 18, (renderedRows.maxOfOrNull(measure) ?: 0) + 12, 86)
-        val height = lineHeight + 9 + renderedRows.size * (lineHeight + 1)
+        val height = lineHeight + 7 + renderedRows.size * lineHeight
         val borderY = 2 + lineHeight / 2
         val titleEnd = 8 + measure(title) + 3
         val operations = mutableListOf<Operation>(
@@ -110,14 +113,14 @@ internal object HotmHudPanel {
             Operation.Fill(2, height - 2, width - 4, 1, ACCENT),
             Operation.Text(title, 8, 2, ACCENT),
         )
-        renderedRows.forEachIndexed { index, row -> operations.add(Operation.Text(row, 6, lineHeight + 5 + index * (lineHeight + 1), WHITE)) }
+        renderedRows.forEachIndexed { index, row -> operations.add(Operation.Text(row, 6, lineHeight + 4 + index * lineHeight, WHITE)) }
         return Plan(width, height, operations)
     }
 
     fun compact(titleText: String, rows: List<Component>, lineHeight: Int, measure: (Component) -> Int): Plan {
         val title = Component.literal(titleText).withStyle(ChatFormatting.BOLD)
         val width = maxOf(measure(title) + 18, (rows.maxOfOrNull(measure) ?: 0) + 12)
-        val height = lineHeight + 9 + rows.size * (lineHeight + 1)
+        val height = lineHeight + 7 + rows.size * lineHeight
         val borderY = 2 + lineHeight / 2
         val titleEnd = 8 + measure(title) + 3
         val operations = mutableListOf<Operation>(
@@ -131,7 +134,7 @@ internal object HotmHudPanel {
             Operation.Fill(2, height - 2, width - 4, 1, ACCENT),
             Operation.Text(title, 8, 2, ACCENT),
         )
-        rows.forEachIndexed { index, row -> operations.add(Operation.Text(row, 6, lineHeight + 5 + index * (lineHeight + 1), WHITE)) }
+        rows.forEachIndexed { index, row -> operations.add(Operation.Text(row, 6, lineHeight + 4 + index * lineHeight, WHITE)) }
         return Plan(width, height, operations)
     }
 

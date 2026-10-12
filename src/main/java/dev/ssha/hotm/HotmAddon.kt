@@ -18,10 +18,12 @@ import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
+import net.minecraft.world.inventory.ContainerInput
 import org.slf4j.LoggerFactory
 import moe.nea.libautoupdate.CurrentVersion
 import moe.nea.libautoupdate.PotentialUpdate
@@ -42,13 +44,23 @@ class HotmAddon : ClientModInitializer {
     private val autoRefresh = AutoHotmRefresh()
     private val pickaxeBanner = PickaxeReadyBanner()
     private var commissionsScreenOpen = false
+    // Silent-read menu that the Gui.setScreen mixin kept off screen; closed once its data arrives.
+    private var hiddenMenu: AbstractContainerScreen<*>? = null
     private var settingsRequested = false
+    private var nextStatsSaveAt = 0L
     private val logger = LoggerFactory.getLogger("SSHA Update")
     private var pendingUpdate: PotentialUpdate? = null
     private var updateCheckInProgress = false
     private var updateInstallInProgress = false
     private var lastRateEnabled = true
     private var commissionsWasActive = false
+    // The silent-read menu after we turned to page 2 for tier 5+ XP; null until that turn happens.
+    private var pageTurnedFrom: List<Pair<String, List<String>>>? = null
+    private var pageTurnedAt = 0L
+
+    private companion object {
+        const val PAGE_LOAD_MS = 1_500L
+    }
     private fun nowMillis(): Long = System.nanoTime() / 1_000_000L
 
     internal fun recordMenu(items: List<Pair<String, List<String>>>): HotmProgress.Observation? {
@@ -66,6 +78,20 @@ class HotmAddon : ClientModInitializer {
 
     override fun onInitializeClient() {
         AddonSettings.load()
+        // Session stats survive restarts and updates: restore them, then copy them back on every save.
+        rateTracker.restore(
+            AddonSettings.data.commissionsCompleted,
+            AddonSettings.data.commissionActiveMillis,
+            AddonSettings.data.commissionWork,
+        )
+        xpRateTracker.restore(AddonSettings.data.hotmXpObserved, AddonSettings.data.hotmXpMeasuredMillis)
+        AddonSettings.beforeSave = {
+            AddonSettings.data.commissionsCompleted = rateTracker.completed
+            AddonSettings.data.commissionActiveMillis = rateTracker.activeMillis
+            AddonSettings.data.commissionWork = rateTracker.observedWork
+            AddonSettings.data.hotmXpObserved = xpRateTracker.observedXp
+            AddonSettings.data.hotmXpMeasuredMillis = xpRateTracker.measurementMillis
+        }
         lastRateEnabled = AddonSettings.data.rateEnabled
         hudIntegration = HotmHudIntegration({ AddonSettings.data }, { AddonSettings.save() }, ::hudLines, rateTracker::estimates)
         hudIntegration.register()
@@ -97,6 +123,7 @@ class HotmAddon : ClientModInitializer {
             recordHoveredTooltip(stack.hoverName.string, tooltip.map { it.string })?.let(::applyObservation)
         }
         ClientTickEvents.END_CLIENT_TICK.register(::onClientTick)
+        SilentHotmRead.install(::claimSilentMenu)
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(createCommand())
         }
@@ -111,6 +138,10 @@ class HotmAddon : ClientModInitializer {
         hudIntegration.tick(minecraft)
         grindingIntegration.tick(minecraft)
         val now = nowMillis()
+        if (now >= nextStatsSaveAt) {
+            nextStatsSaveAt = now + 10_000L
+            AddonSettings.save()
+        }
         SkyblockerCompatibility.update(AddonSettings.data.hudEnabled && minecraft.player != null)
         if (!AddonSettings.data.pickaxeResetTitle || minecraft.player == null || !MiningArea.current()) pickaxeResetTracker.reset()
         else if (TabWidget.PICKAXE_COOLDOWN.isActive &&
@@ -144,7 +175,8 @@ class HotmAddon : ClientModInitializer {
         }
         val xpEligible = minecraft.player != null && MiningArea.current() && AddonSettings.data.rateEnabled
         if (xpEligible && !rateTracker.isPaused(now)) xpRateTracker.start(now)
-        xpRateTracker.tick(now, xpEligible)
+        // Paused commission time must not count toward the XP/h denominator, or the average drifts down.
+        xpRateTracker.tick(now, xpEligible && !rateTracker.isPaused(now))
         val commissions = HotmProgress.activeCommissions(
             if (TabWidget.COMMISSIONS.isActive) TabWidget.COMMISSIONS.lines.map { it.string } else emptyList(),
         )
@@ -156,18 +188,31 @@ class HotmAddon : ClientModInitializer {
         val container = minecraft.gui.screen() as? AbstractContainerScreen<*>
         // Commission claims happen in the King's menu; re-read /hotm once that menu closes.
         val commissionsOpen = container?.title?.string?.contains("Commissions", true) == true
-        if (commissionsScreenOpen && !commissionsOpen) autoRefresh.request(now, 1_000L)
+        if (commissionsScreenOpen && !commissionsOpen) autoRefresh.request(now, 300L)
         commissionsScreenOpen = commissionsOpen
         autoRefresh.expire(now)
-        if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null) && SkyBlockUtils.inSkyBlock) {
+        // Manual progress means automatic capture is paused, so no silent /hotm reads until /ssha auto resumes it.
+        if (!AddonSettings.data.manualProgress && autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null) && SkyBlockUtils.inSkyBlock) {
             minecraft.player?.connection?.sendCommand("hotm")
+        }
+
+        // A hidden silent-read menu never reached the screen; finish reading it, then close it.
+        hiddenMenu?.let { hidden ->
+            val items = menuItems(hidden)
+            val hiddenObservation = recordMenu(items)?.also(::applyObservation)
+            if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
+            if (autoRefresh.menuOpened(now, hiddenObservation?.xpToNextTier != null)) {
+                hiddenMenu = null
+                pageTurnedFrom = null
+                minecraft.player?.closeContainer()
+            }
         }
 
         val menu = container ?: return
         if (!HotmProgress.isHotmInventoryTitle(menu.title.string)) return
         val observation = recordMenu(menuItems(menu))?.also(::applyObservation)
         // Close only the menu our silent read opened; a menu the player opened stays open.
-        if (autoRefresh.menuOpened(now, observation?.xpToNextTier != null)) minecraft.player?.closeContainer()
+        if (hiddenMenu == null && autoRefresh.menuOpened(now, observation?.xpToNextTier != null)) minecraft.player?.closeContainer()
     }
 
     private fun checkForUpdates() {
@@ -244,8 +289,18 @@ class HotmAddon : ClientModInitializer {
             } else {
                 pendingUpdate = null
                 notify("§aSSHA update downloaded and verified. Exit Minecraft to install it, then relaunch from your launcher.")
+                ChatUtils.clickableChat(
+                    "§a§lClick here to restart your game!",
+                    onClick = ::closeGameForRestart,
+                    hover = "§eCloses Minecraft so the verified update can install. Relaunch from your launcher.",
+                    oneTimeClick = true,
+                )
             }
         } }
+    }
+
+    private fun closeGameForRestart() {
+        Minecraft.getInstance().stop()
     }
 
     private fun updateContext(): UpdateContext? {
@@ -272,6 +327,14 @@ class HotmAddon : ClientModInitializer {
         )
     }
 
+    private fun autoReadPrompt(runAuto: () -> Unit) {
+        ChatUtils.clickableChat(
+            "§eClick to run §6/ssha auto §eand read HOTM now.",
+            onClick = runAuto,
+            hover = "§7Turns automatic capture back on and reads /hotm once.",
+        )
+    }
+
     private fun notify(message: String) {
         ChatUtils.chat(message)
     }
@@ -294,7 +357,7 @@ class HotmAddon : ClientModInitializer {
         receiveHotmMessage(message, nowMillis(), AddonSettings.data,
             screen?.title?.string?.contains("Commissions", true) == true, MiningArea.current(), AddonSettings::save)
         // Live reward chat is applied immediately; a silent menu read then reconciles the exact total.
-        if (AutoHotmRefresh.isRewardMessage(message)) autoRefresh.request(nowMillis(), 1_500L)
+        if (AutoHotmRefresh.isRewardMessage(message)) autoRefresh.request(nowMillis(), 500L)
     }
 
     internal fun receiveHotmMessage(message: String, now: Long, data: AddonSettingsData,
@@ -315,6 +378,39 @@ class HotmAddon : ClientModInitializer {
         }
     }
 
+    /**
+     * Silent reads only: at tier 5+ the XP is on page 2, so turn the page once and wait briefly for its items.
+     * Returns true while the menu should stay open. The player's own /hotm menu is never paged.
+     */
+    private fun turnToXpPage(
+        minecraft: Minecraft,
+        menu: AbstractContainerScreen<*>,
+        items: List<Pair<String, List<String>>>,
+        observation: HotmProgress.Observation?,
+        now: Long,
+    ): Boolean {
+        val before = pageTurnedFrom
+        if (before != null) return items == before && now - pageTurnedAt < PAGE_LOAD_MS
+        if (!HotmProgress.needsSecondPageForXp(observation)) return false
+        val nextPage = menu.menu.slots.firstOrNull {
+            !it.item.isEmpty && HotmProgress.isNextPageItemName(it.item.hoverName.string)
+        } ?: return false
+        val player = minecraft.player ?: return false
+        minecraft.gameMode?.handleContainerInput(menu.menu.containerId, nextPage.index, 0, ContainerInput.PICKUP, player)
+        pageTurnedFrom = items
+        pageTurnedAt = now
+        return true
+    }
+
+    /** Called from the Gui.setScreen mixin: hides the HOTM menu our silent read opened instead of showing it. */
+    private fun claimSilentMenu(screen: Screen): Boolean {
+        val container = screen as? AbstractContainerScreen<*> ?: return false
+        if (!autoRefresh.awaitingMenu() || hiddenMenu != null) return false
+        if (!HotmProgress.isHotmInventoryTitle(container.title.string)) return false
+        hiddenMenu = container
+        return true
+    }
+
     private fun applyObservation(observation: HotmProgress.Observation) {
         val reconciled = if (!AddonSettings.data.manualProgress) xpRateTracker.observation(observation, nowMillis()) else observation
         if (AddonSettings.data.applyAutomaticObservation(reconciled, System.currentTimeMillis())) AddonSettings.save()
@@ -326,14 +422,21 @@ class HotmAddon : ClientModInitializer {
         openGui: () -> Unit = { hudIntegration.requestEditor() },
         openSettings: () -> Unit = { settingsRequested = true },
         readHotm: () -> Unit = { autoRefresh.request(nowMillis(), 0L) },
+        offerAutoRead: (() -> Unit) -> Unit = { autoReadPrompt(it) },
     ): LiteralArgumentBuilder<FabricClientCommandSource> {
         val command = LiteralArgumentBuilder.literal<FabricClientCommandSource>("ssha")
+        val runAuto: () -> Unit = {
+            settings().resumeAutomaticProgress()
+            saveSettings()
+            readHotm()
+        }
         command.executes {
             openSettings()
             1
         }
         command.then(LiteralArgumentBuilder.literal<FabricClientCommandSource>("status").executes { context ->
             context.source.sendFeedback(Component.literal(statusText(settings())))
+            if (settings().hotmTier == null || settings().xpToNextTier == null) offerAutoRead(runAuto)
             1
         })
         command.then(
@@ -382,9 +485,7 @@ class HotmAddon : ClientModInitializer {
         command.then(
             LiteralArgumentBuilder.literal<FabricClientCommandSource>("auto")
                 .executes { context ->
-                    settings().resumeAutomaticProgress()
-                    saveSettings()
-                    readHotm()
+                    runAuto()
                     context.source.sendFeedback(Component.literal("§aAutomatic capture enabled. Reading /hotm now; the menu opens and closes by itself."))
                     1
                 },
@@ -394,6 +495,7 @@ class HotmAddon : ClientModInitializer {
                 .executes { context ->
                     if (lastHoveredTooltip.isEmpty()) {
                         context.source.sendFeedback(Component.literal("§eOpen /hotm, hover the progress item, then run /ssha tooltip."))
+                        offerAutoRead(runAuto)
                     } else {
                         context.source.sendFeedback(Component.literal("§6[SSHA] Last hovered /hotm item (copy these lines for diagnostics):"))
                         lastHoveredTooltip.distinct().forEach { line ->
@@ -408,6 +510,7 @@ class HotmAddon : ClientModInitializer {
                 .executes { context ->
                     if (lastHotmMenu.isEmpty()) {
                         context.source.sendFeedback(Component.literal("§eOpen /hotm once, close it, then run /ssha menu. No hovering needed."))
+                        offerAutoRead(runAuto)
                     } else {
                         context.source.sendFeedback(Component.literal("§6[SSHA] Last /hotm menu tier items (raw text; no hovering needed):"))
                         lastHotmMenu.forEach { (name, lore) ->
@@ -511,6 +614,11 @@ internal data class AddonSettingsData(
     var activeCommissions: List<String> = emptyList(),
     var pendingCommissionCompletions: Int = 0,
     var lastCommissionCompletionAtMs: Long = 0L,
+    var commissionsCompleted: Long = 0L,
+    var commissionActiveMillis: Long = 0L,
+    var commissionWork: Double = 0.0,
+    var hotmXpObserved: Long = 0L,
+    var hotmXpMeasuredMillis: Long = 0L,
 ) {
     fun setManualProgress(tier: Int, earnedXp: Long) {
         val observation = HotmProgress.manualObservation(tier, earnedXp)
@@ -576,6 +684,8 @@ private object AddonSettings {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val file = File(Minecraft.getInstance().gameDirectory, "config/ssha-hotm-addon.json")
     var data = AddonSettingsData(progressFormatVersion = 1)
+    // Copies live session stats into [data] before each write.
+    var beforeSave: () -> Unit = {}
 
     fun load() {
         if (!file.exists()) return
@@ -591,6 +701,7 @@ private object AddonSettings {
 
     fun save() {
         try {
+            beforeSave()
             checkNotNull(file.parentFile).mkdirs()
             file.writeText(gson.toJson(data))
         } catch (exception: Exception) {

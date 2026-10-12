@@ -8,18 +8,19 @@ The source is included so SSHA can be inspected, built, tested, maintained, and 
 
 ## Install
 
-Download **ssha_1.3.2.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
+Download **ssha_1.4.1.jar** from [GitHub Releases](https://github.com/Siegeisok67/SSHA/releases). Replace the old SSHA jar, do not install both.
 
 Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API **0.155.2+26.2**, Fabric Language Kotlin **1.13.12+kotlin.2.4.0+**, and compatible SkyHanni **9.0.0+**. Skyblocker and SkyOcean are optional, not runtime requirements.
 
 ## Features
 
-- Compact teal HOTM summary and single-line commission name/percentage rows, without progress bars.
+- Compact, more transparent teal HOTM summary and single-line commission rows (name and percentage, no progress bars). Finished commissions stay listed as a green **Completed!** row.
 - Widgets appear only in SkyBlock's Dwarven Mines (including Glacite Tunnels), Crystal Hollows and Glacite Mineshafts, never the Hypixel lobby. The position editor can preview enabled widgets outside these areas.
 - Skyblocker's commission widget rendering is suppressed while SSHA's HOTM HUD is enabled in a supported area. Disabling SSHA restores it automatically; Skyblocker's saved layout/config is not modified. Compatibility targets Skyblocker 6.10.4's TabHudWidget API; other versions need live verification.
 - `/ssha gui` edits the HOTM widget and every enabled grinding/powder widget together. Drag to move, scroll to resize, close to save. A material's Move button also includes other enabled widgets.
-- Commission timing starts/resumes only on positive progress or completion, not on first tab visibility. Commission and powder/material trackers pause after **20 seconds** without progress. HOTM XP/h instead uses elapsed eligible mining-session time (including claims, travel and idle time), so delayed bulk rewards cannot inflate rates using a short commission-progress denominator. It only displays actual observed XP, not partial commission XP estimates. Suspended/offline gaps are excluded. Rates warm up after **60 seconds of active time**, with optional **90-second exponential smoothing**.
-- Avg. Commissions/h counts observed partial commission work, not just finished commissions. Optional finish estimates use percentage gained over active time; travel, luck and coarse tab updates affect accuracy.
+- Commission timing starts or resumes only on positive progress or completion, not on first tab visibility. Commission and powder/material trackers pause after **20 seconds** without progress. HOTM XP/h uses elapsed eligible mining-session time (including claims, travel and idle time) and pauses with the commission timer, so delayed bulk rewards cannot inflate rates and paused time does not drag the average down. Suspended/offline gaps are excluded. Rates warm up after **60 seconds of active time**, with optional **90-second exponential smoothing**.
+- Avg. Commissions/h counts observed partial commission work, not just finished commissions. The optional commission ETA uses percentage gained over active time; it holds its estimate until progress changes, then counts down. Travel, luck and coarse tab updates affect accuracy.
+- **Session stats persist.** Commission totals, Avg. Commissions/h and Avg. HOTM XP/h are saved to `config/ssha-hotm-addon.json` and restored on restart or update. Saves run every 10 seconds, so up to 10 seconds of activity can be lost on quit. Reset actions in the menu clear them.
 - Separate gold, diamond, mithril, titanium, umber, tungsten, Glacite Jewel and Mithril Powder widgets. Material widgets/popups start disabled.
 - Sack gains use a **1-second** reconciliation window (rather than 10 seconds) to reject nearby withdrawals/compaction. Inventory pickups are also tracked outside container screens. Opening a sack updates holdings immediately; opening does not count existing holdings as session gain.
 - Sack Limit reads each item's server lore, including stacked/upgraded capacity. Raw, enchanted and product limits are separate; SSHA never assumes the base 20.2k limit. Open each relevant sack on each profile/session to establish known totals and limits. Abbreviated lore capacities are only as precise as the server display.
@@ -27,9 +28,10 @@ Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API 
 - Optional **Compact to …** reminder at a configurable raw-equivalent threshold, naming the target (e.g. **Compact to Enchanted Mithril**, **Compact to Enchanted Gold Block**).
 - **Est. Profit/h** uses product equivalents/hour and Bazaar instant-sell prices. Session details show product-equivalent value and observed Supercraft output/value. Refined materials/handles are estimates, not completed forge outputs; no forge costs/time, taxes or realized sales are included. Known stored totals can be partial until all relevant sacks are opened.
 - Mithril Powder counts actual SkyHanni deltas without multiplying Double Powder twice. Only explicit Goblin Raid/Raffle/Mithril Gourmand end-reward amounts and powder during 2x Powder enter the event subtotal; passive Better Together/Gone with the Wind gains remain normal mining powder. Original reward chat is reconciled with total deltas with a one-second delay and five-second matching window, including merged mining/reward totals. **Include Commission Powder** is off by default (Grinding → Mithril Powder); identified commission powder is excluded unless enabled. Powder itself has no coin value.
-- HOTM reward messages update XP left and commissions left immediately after an initial `/hotm` capture, even if another mod hides chat. Refreshed menu lore reconciles rewards once, and repeated/partially stale lore cannot overwrite newer live values. Commission claims (reward chat, or closing the Commissions menu) also trigger a silent `/hotm` read that opens and closes the menu by itself, and never interrupts another open GUI. Manual progress deliberately stays fixed until `/ssha auto`.
-- **Pickaxe Ability Ready Banner** is off by default (Mining → HOTM Widget). It shows a small green **Pickaxe Ability Ready** banner once when Hypixel reports the ability is available again (e.g. `Mining Speed Boost is now available!`), on a server cooldown→Available transition, or on an explicit reset message. Actual cooldown comes from the Pickaxe Ability tab widget, not a fixed 120-second assumption; enable that server widget to reliably observe cooldown readiness. No guessed countdown expiration generates a title.
-- `/ssha` opens About first: installed version, release links, an on-demand stable-release checker, and an install action. The checker excludes pre-releases and accepts only the exact versioned SSHA JAR hosted on the official GitHub release, with its SHA-256 digest verified before scheduling replacement. The jar swap runs after Minecraft exits; it does not restart the game or launcher, so relaunch from your normal launcher. No background update checks run. Use Releases for manual downloads if the in-game check/install fails.
+- HOTM reward messages update XP left and commissions left immediately after an initial `/hotm` capture, even if another mod hides chat. Refreshed menu lore reconciles rewards once, and repeated or partially stale lore cannot overwrite newer live values. Manual progress deliberately stays fixed until `/ssha auto`.
+- **Silent /hotm reads.** Commission claims (reward chat, or closing the Commissions menu) and `/ssha auto` read `/hotm` without showing the menu: the addon hides the screen, reads the slots, and closes it. A read never starts while another GUI is open. At tier 5+ the XP is on page 2 of `/hotm`, so a silent read turns the page once and reads it; your own `/hotm` menu is never paged. A HOTM menu you open during a pending read is also hidden and closed, so avoid opening `/hotm` in the moment right after a claim.
+- **Pickaxe Ability Reminder** is off by default (Mining → HOTM Widget). It shows a small green **Pickaxe Ability Ready** banner once when Hypixel reports the ability is available again (for example `Pickobulus is now available!` or `Mining Speed Boost is now available!`), on a cooldown → Available tab transition, or on an explicit reset message. Repeats within 5 seconds are suppressed. Cooldown readiness comes from the Pickaxe Ability tab widget, so enable that server widget to observe it. No guessed countdown generates a banner.
+- **Update downloads.** `/ssha` opens the settings menu. Its About category shows the stable-release check, install, release notes, source and issue links inline; your installed version is in the menu title. The checker excludes pre-releases and accepts only the exact versioned SSHA JAR hosted on the official GitHub release, with its SHA-256 digest verified before scheduling replacement. The jar swap runs after Minecraft exits; it does not restart the game or launcher. When a download finishes, chat shows a clickable **Click here to restart your game!** message that closes Minecraft. No background update checks run. Use Releases for manual downloads if the in-game check or install fails.
 
 ## Commands
 
@@ -41,20 +43,20 @@ Requires Minecraft **26.2**, Java **25**, Fabric Loader **0.19.3+**, Fabric API 
 | `/ssha hud true\|false` | Toggle HOTM/commission HUD |
 | `/ssha set hotmxp <xp>` | Estimated base XP per commission (default 750) |
 | `/ssha set progress <tier> <earnedXp>` | Manual current unlocked tier and XP earned within it |
-| `/ssha auto` | Resume automatic capture and read `/hotm` now |
+| `/ssha auto` | Resume automatic capture and read `/hotm` silently now |
 | `/ssha menu` | Diagnose last `/hotm` menu capture, no hover needed |
 | `/ssha tooltip` | Diagnose last hovered `/hotm` tooltip |
 | `/ssha clear-events` | Clear accumulated attributed event XP |
 
 Open `/hotm` once to capture current tier/XP. Arabic/Roman tiers and abbreviated progress fractions are supported. Manual mode blocks automatic/live changes until `/ssha auto`. For example `/ssha set progress 6 12000` gives 138,000 XP remaining to tier 7 and ~184 commissions at 750 XP. Automatic capture of a *locked* Tier 6 item showing 12,000/100k means current tier 5 with 88,000 XP remaining.
 
-Settings remain at `config/ssha-hotm-addon.json` for compatibility. Session rates reset on restart/profile change. Missing/untrusted sack totals and unavailable prices are never invented.
+Settings and saved stats live at `config/ssha-hotm-addon.json` for compatibility. Missing or untrusted sack totals and unavailable prices are never invented.
 
 ## Build and verification
 
 Java 25: `./gradlew build` (Windows: `gradlew.bat build`).
 
-- Installable client jar: `build/libs/ssha_1.3.2.jar`
+- Installable client jar: `build/libs/ssha_1.4.1.jar`
 - GitHub automatically prepares the source archive when a release is published.
 
-Automated tests cover parsing, command dispatch/settings persistence, rates/pause/resume, completion deduplication, sack lore/capacities, reconciliation, event reward classification and renderer bounds. A build cannot prove live Hypixel packet behavior, Skyblocker mixin compatibility, editor mouse interactions or appearance; these still need in-game verification. Never include personal Minecraft config, credentials, logs or caches in releases.
+Automated tests cover parsing, command dispatch and settings persistence (including saved session stats), rates/pause/resume, completion deduplication, pickaxe readiness, the HUD and ETA countdown, sack lore/capacities, reconciliation, event reward classification and renderer bounds. A build cannot prove live Hypixel packet behavior, Skyblocker mixin compatibility, the silent-read hiding, editor mouse interactions or appearance; these still need in-game verification. Never include personal Minecraft config, credentials, logs or caches in releases.

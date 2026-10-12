@@ -30,6 +30,13 @@ class HotmHudPanelTest {
     }
 
     @Test
+    fun `finished commission shows green Completed text instead of disappearing`() {
+        val panel = plan(listOf(Component.literal("HOTM:"), Component.literal("Commissions:"), Component.literal(" Mithril Miner: DONE")))
+        assertTrue(panel.operations.any { it is HotmHudPanel.Operation.Text && it.text.string == "Mithril Miner §aCompleted!" })
+        assertInside(panel)
+    }
+
+    @Test
     fun `percent and fraction inputs give bounded bars and unknown text is not fake progress`() {
         assertEquals(12.0, HotmHudPanel.commission("§fMithril Miner: §a12%")?.percent)
         assertEquals(25.0, HotmHudPanel.commission("Mithril Miner: 2,500 / 10,000")?.percent)

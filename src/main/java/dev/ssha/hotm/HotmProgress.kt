@@ -79,6 +79,13 @@ object HotmProgress {
     fun isProgressItemName(name: String): Boolean = name.cleanText().equals("Heart of the Mountain", ignoreCase = true) ||
         tierItemPattern.matches(name.cleanText())
 
+    /** From tier 5 on, /hotm shows XP progress on page 2; page 1 shows only the tier. */
+    fun needsSecondPageForXp(observation: Observation?): Boolean =
+        observation != null && observation.tier != null && observation.tier >= 5 && observation.xpToNextTier == null
+
+    /** The /hotm page-turn arrow, named "Next Page" with an optional arrow suffix. */
+    fun isNextPageItemName(name: String): Boolean = name.cleanText().startsWith("Next Page", ignoreCase = true)
+
     private fun itemTier(name: String): Int? = tierItemPattern.matchEntire(name.cleanText())
         ?.groupValues?.get(1)?.toTierOrNull()
 

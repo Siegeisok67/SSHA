@@ -144,6 +144,12 @@ internal class HotmXpRateTracker {
     fun clearBaseline() { baseline = null; lastMenuObservation = null; chatSinceBaseline = 0L; menuCredit = 0L; menuCreditAt = Long.MIN_VALUE }
     fun average(smooth: Boolean): Double? = measuredRate.value(observedXp.toDouble(), measurementMillis, smooth)
 
+    fun restore(observedXp: Long, measurementMillis: Long) {
+        this.observedXp = observedXp
+        this.measurementMillis = measurementMillis
+        hasObservedXp = observedXp > 0L
+    }
+
     fun reset() {
         observedXp = 0L; hasObservedXp = false; dailyBonuses = 0; dailyBonusXp = 0L; bonusDate = null
         commissionRewardUntil = Long.MIN_VALUE; eventRewardUntil = Long.MIN_VALUE; pendingClaims.clear()

@@ -37,8 +37,8 @@ class AutoHotmRefreshTest {
         assertTrue(refresh.poll(0L, guiOpen = false))
         refresh.request(1_000L, 0L)
         assertFalse(refresh.poll(1_000L, guiOpen = false))
-        assertFalse(refresh.poll(9_999L, guiOpen = false))
-        assertTrue(refresh.poll(10_000L, guiOpen = false))
+        assertFalse(refresh.poll(2_999L, guiOpen = false))
+        assertTrue(refresh.poll(3_000L, guiOpen = false))
     }
 
     @Test
