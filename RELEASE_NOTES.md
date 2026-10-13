@@ -6,6 +6,8 @@
 
 `build/libs/ssha_1.5.9.jar`. GitHub automatically prepares the source archive when a release is published.
 
+SHA256 `ssha_1.5.9.jar`: `24d8184d480fb2d9d782205a96cc9209ec9927e58da40e272ff388dfb2216213`
+
 Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
 
 ## Limits
