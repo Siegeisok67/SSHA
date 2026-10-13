@@ -25,6 +25,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.world.inventory.ContainerInput
+import net.minecraft.world.item.Items
 import org.slf4j.LoggerFactory
 import moe.nea.libautoupdate.CurrentVersion
 import moe.nea.libautoupdate.PotentialUpdate
@@ -501,16 +502,19 @@ class HotmAddon : ClientModInitializer {
         // Empty items mean the menu contents have not arrived yet: keep waiting for them.
         if (items.isEmpty()) return true
         if (!HotmProgress.needsSecondPageForXp(observation)) return false
+        // The Next Page arrow moves to page 2. The yellow pane on page 2 is the level being worked toward.
         val nextPage = menu.menu.slots.firstOrNull {
-            !it.item.isEmpty && HotmProgress.isNextPageItemName(it.item.hoverName.string)
+            !it.item.isEmpty && (HotmProgress.isNextPageItemName(it.item.hoverName.string) || it.item.item == Items.ARROW)
         } ?: return false
         val player = minecraft.player ?: return false
         // Slot positions are the packet slot ids; never trust a renamed index field.
         val slotId = menu.menu.slots.indexOf(nextPage).takeIf { it >= 0 } ?: nextPage.index
-        // Right-click, as the Next Page button expects; a left-click does not turn the page.
+        // Right-click, as the Next Page arrow expects.
         minecraft.gameMode?.handleContainerInput(menu.menu.containerId, slotId, 1, ContainerInput.PICKUP, player)
         pageTurnedFrom = items
         pageTurnedAt = now
+        // The read budget started at /hotm; page 2 needs its own wait or it is cut off mid-load.
+        autoRefresh.restartWait(now)
         return true
     }
 
@@ -768,7 +772,11 @@ internal data class AddonSettingsData(
     fun applyAutomaticObservation(observation: HotmProgress.Observation, now: Long): Boolean {
         if (manualProgress) return false
         val previous = HotmProgress.Observation(hotmTier, xpToNextTier)
-        if (observation.tier != null && observation.tier != hotmTier) {
+        // Page 1 lists tiers 1-5 only, so a tier-only read is a floor: at tier 6 it reads 5. Only an
+        // XP-bearing read may lower the stored tier; a tier-only read can raise it.
+        val stored = hotmTier
+        val tier = observation.tier?.takeIf { observation.xpToNextTier != null || stored == null || it > stored }
+        if (tier != null && tier != hotmTier) {
             // Adopt the new tier, but never discard a known XP sample for a tier-only
             // disagreement: page 1 and page 2 can briefly disagree (display buffs, layout
             // differences), and nuking here is what reset XP left back to the capture prompt.
@@ -777,7 +785,7 @@ internal data class AddonSettingsData(
         }
         // Menu deltas cannot reliably distinguish base rewards, daily bonuses, and events.
         // Only explicitly identified live event reward messages add to extraEventXp.
-        observation.tier?.let { hotmTier = it }
+        tier?.let { hotmTier = it }
         observation.xpToNextTier?.let { xpToNextTier = it }
         return previous != HotmProgress.Observation(hotmTier, xpToNextTier)
     }

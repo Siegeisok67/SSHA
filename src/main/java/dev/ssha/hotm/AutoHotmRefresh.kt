@@ -78,6 +78,11 @@ internal class AutoHotmRefresh(
         return true
     }
 
+    /** A page turn is part of the same read: give the new page its own full wait from [now]. */
+    fun restartWait(now: Long) {
+        if (awaitingSince != null) awaitingSince = now
+    }
+
     /** True while a read we sent is still waiting for its menu. */
     fun awaitingMenu(): Boolean = awaitingSince != null
 

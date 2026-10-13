@@ -79,6 +79,46 @@ class MiningRegressionTest {
     }
 
     @Test
+    fun `a page turn gives page two its own read window`() {
+        val refresh = AutoHotmRefresh(readTimeoutMs = 5_000L)
+        refresh.request(0L, 0L)
+        assertTrue(refresh.poll(1_000L, guiOpen = false, enabled = true))
+        refresh.restartWait(4_000L)
+        // Without the restart this read gives up at 6,000 ms, before page two has loaded.
+        assertFalse(refresh.menuOpened(6_000L, read = false))
+        assertTrue(refresh.menuOpened(9_000L, read = false))
+    }
+
+    @Test
+    fun `page one tier 5 read never lowers a known tier 6`() {
+        // Page 1 lists tiers 1-5 only, so a silent read at tier 6 reads 5. That floor must not lower the tier.
+        val settings = AddonSettingsData(hotmTier = 6, xpToNextTier = 146_710L)
+        settings.applyAutomaticObservation(HotmProgress.Observation(5, null), 1_000L)
+        assertEquals(6, settings.hotmTier)
+        assertEquals(146_710L, settings.xpToNextTier)
+        settings.applyAutomaticObservation(HotmProgress.Observation(6, 146_710L), 2_000L)
+        assertEquals(6, settings.hotmTier)
+    }
+
+    @Test
+    fun `HOTM 10 is complete without a page turn`() {
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(10, null)))
+        assertTrue(HotmProgress.readComplete(HotmProgress.Observation(10, null)))
+    }
+
+    @Test
+    fun `page two yellow in-progress row gives tier 6 and XP left from the screenshot layout`() {
+        // Tier 6 is green (UNLOCKED). Tier 7 is the yellow row being worked (3,290 of 150k).
+        val menu = listOf(
+            "Tier 6" to listOf("Rewards", "UNLOCKED"),
+            "Tier 7" to listOf("Progress: 2.2%", "3,290/150k", "Rewards", "LOCKED"),
+            "Tier 8" to listOf("Requires Tier 7", "LOCKED"),
+            "Heart of the Mountain" to listOf("Token of the Mountain: 0"),
+        )
+        assertEquals(HotmProgress.Observation(6, 146_710L), HotmProgress.readMenuObservation(menu))
+    }
+
+    @Test
     fun `overflow warns once at capacity rearms and respects toggle`() {
         val sacks = SackSnapshot()
         sacks.read("MITHRIL_ORE", listOf("Stored: 221,799/221.8k"))

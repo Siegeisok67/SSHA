@@ -82,7 +82,8 @@ class HotmProgressTest {
     @Test
     fun `silent reads turn to page 2 only when tier 5 or higher shows no XP`() {
         assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(5, null)))
-        assertTrue(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(10, null)))
+        // HOTM 10 is max tier: no yellow next-level row, so no page turn.
+        assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(10, null)))
         assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(4, null)))
         assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(6, 138_000L)))
         assertFalse(HotmProgress.needsSecondPageForXp(HotmProgress.Observation(null, null)))

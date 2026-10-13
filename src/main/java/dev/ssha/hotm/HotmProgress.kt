@@ -81,13 +81,19 @@ object HotmProgress {
     fun isProgressItemName(name: String): Boolean = name.cleanText().equals("Heart of the Mountain", ignoreCase = true) ||
         tierItemPattern.matches(name.cleanText())
 
-    /** From tier 5 on, /hotm shows XP progress on page 2; page 1 shows only the tier. */
+    /**
+     * Page 1 lists only tiers 1-5, so a tier 5 read there is a floor: the player may be higher.
+     * From tier 5 up to 9, XP is on page 2. HOTM 10 is max and needs no XP, so it never turns.
+     */
     fun needsSecondPageForXp(observation: Observation?): Boolean =
-        observation != null && observation.tier != null && observation.tier >= 5 && observation.xpToNextTier == null
+        observation != null && observation.tier != null && observation.tier in 5..9 && observation.xpToNextTier == null
 
-    /** A silent read is finished once XP is known, or the tier is below 5 and needs no second page. */
+    /** A silent read is finished once XP is known, the tier is below 5, or the player is at HOTM 10. */
     fun readComplete(observation: Observation?): Boolean =
-        observation != null && (observation.xpToNextTier != null || (observation.tier != null && observation.tier < 5))
+        observation != null && (
+            observation.xpToNextTier != null ||
+                (observation.tier != null && (observation.tier < 5 || observation.tier == 10))
+            )
 
     /** The /hotm page-turn arrow, named "Next Page" with an optional arrow suffix. */
     fun isNextPageItemName(name: String): Boolean = name.cleanText().startsWith("Next Page", ignoreCase = true)
