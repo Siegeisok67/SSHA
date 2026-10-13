@@ -99,6 +99,14 @@ class HotmProgressTest {
     }
 
     @Test
+    fun `read summary does not present a page-one tier 5 floor as the final tier`() {
+        assertEquals("tier 5 or higher, XP left not captured.", HotmProgress.readSummary(HotmProgress.Observation(5, null)))
+        assertEquals("tier 4, XP left not captured.", HotmProgress.readSummary(HotmProgress.Observation(4, null)))
+        assertEquals("tier 7, XP left 143,303.", HotmProgress.readSummary(HotmProgress.Observation(7, 143_303L)))
+        assertEquals("tier unknown, XP left not captured.", HotmProgress.readSummary(HotmProgress.Observation(null, null)))
+    }
+
+    @Test
     fun `only active unfinished commission widget rows are retained`() {
         assertEquals(
             listOf("Mithril Miner: 2/10", "Goblin Slayer: 0/10", "Crystal Collector: 3/5"),

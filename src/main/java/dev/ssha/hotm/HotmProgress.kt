@@ -1,5 +1,7 @@
 package dev.ssha.hotm
 
+import java.util.Locale
+
 /** HOTM arithmetic and text parsing for client-visible game data. */
 object HotmProgress {
     private const val TIER_NUMBER = "(10|[1-9]|VIII|VII|VI|IV|IX|III|II|V|X|I)"
@@ -94,6 +96,18 @@ object HotmProgress {
             observation.xpToNextTier != null ||
                 (observation.tier != null && (observation.tier < 5 || observation.tier == 10))
             )
+
+    /**
+     * Chat summary of a /hotm read. Page 1 only lists tiers 1-5, so a tier 5 read there is a floor
+     * and its XP may not have been captured; the summary says so instead of presenting it as final.
+     */
+    fun readSummary(observation: Observation): String {
+        val tier = observation.tier?.toString() ?: "unknown"
+        val xp = observation.xpToNextTier
+        if (xp != null) return "tier $tier, XP left ${String.format(Locale.US, "%,d", xp)}."
+        val floor = if (observation.tier == 5 && needsSecondPageForXp(observation)) " or higher" else ""
+        return "tier $tier$floor, XP left not captured."
+    }
 
     /** The /hotm page-turn arrow, named "Next Page" with an optional arrow suffix. */
     fun isNextPageItemName(name: String): Boolean = name.cleanText().startsWith("Next Page", ignoreCase = true)

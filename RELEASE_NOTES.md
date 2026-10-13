@@ -1,3 +1,22 @@
+# SSHA 1.5.18 — Faster HOTM read close, accurate read messages
+
+- **Close reads that can't reach XP.** At tier 5+ the XP is on page 2. If the menu has no Next Page arrow, the silent read now closes at once instead of holding the menu for the 5-second timeout.
+- **Honest read messages.** A read without XP left says `XP left not captured` and no longer presents a page-1 tier 5 as the final tier; the summary says `tier 5 or higher`.
+
+## Release artifact
+
+`build/libs/ssha_1.5.18.jar`. GitHub automatically prepares the source archive when a release is published.
+
+SHA256 `ssha_1.5.18.jar`: `6812d9944d24619f075f1f18f8b6afd4c7e573a33187b8ff15e11592beefe5ad`
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+Not yet verified in Minecraft. The cause of XP not being captured at tier 5+ is not confirmed; this release only stops the menu from being held and makes the message truthful.
+
+---
+
 # SSHA 1.5.17 — Keep HOTM read ownership for late menus
 
 - **Claim late /hotm menus.** The server can deliver `/hotm` after the 5-second read timer expires. Read ownership now lasts 10 seconds after sending, and a menu arriving in that window gets a fresh read timer before it is closed.

@@ -238,7 +238,7 @@ class HotmAddon : ClientModInitializer {
             val hiddenObservation = recordMenu(items)?.also(::applyObservation)
             // Check completion/timeout before waiting on an empty or changing page, so an
             // owned menu can never be kept open by turnToXpPage's loading path.
-            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation))) {
+            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation) || xpPageUnreachable(hidden, hiddenObservation))) {
                 reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
@@ -262,7 +262,7 @@ class HotmAddon : ClientModInitializer {
             if (hiddenMenu == null && autoRefresh.claimMenu(now, READ_OWNERSHIP_MS)) {
                 // Allow a page turn to restart the timeout before the timeout branch consumes this menu.
                 val shouldWaitForPage = turnToXpPage(minecraft, container, items, observation, now)
-                if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
+                if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation) || xpPageUnreachable(container, observation))) {
                     reportUserRead(observation)
                     pageTurnedFrom = null
                     // Close both the local GUI and server-side container.
@@ -287,8 +287,8 @@ class HotmAddon : ClientModInitializer {
             notify("§c${failureReason ?: "SSHA could not read HOTM."} Open /hotm once, then run /ssha menu and send its output.")
             return
         }
-        val xp = observation.xpToNextTier?.prettyNumber() ?: "not captured yet"
-        notify("§aSSHA read HOTM: tier ${observation.tier ?: "unknown"}, XP left $xp.")
+        val color = if (observation.xpToNextTier != null) "§a" else "§e"
+        notify("${color}SSHA read HOTM: ${HotmProgress.readSummary(observation)}")
     }
 
     /** Every login surfaces a known pending update without another network check. Only the first
@@ -499,6 +499,14 @@ class HotmAddon : ClientModInitializer {
         }
     }
 
+    private fun nextPageSlotOf(menu: AbstractContainerScreen<*>) = menu.menu.slots.firstOrNull {
+        !it.item.isEmpty && (HotmProgress.isNextPageItemName(it.item.hoverName.string) || it.item.item == Items.ARROW)
+    }
+
+    /** Tier 5+ needs page 2 for XP, and this menu has no Next Page arrow to get there. Finish now rather than hold the menu for the timeout. */
+    private fun xpPageUnreachable(menu: AbstractContainerScreen<*>, observation: HotmProgress.Observation?): Boolean =
+        pageTurnedFrom == null && HotmProgress.needsSecondPageForXp(observation) && nextPageSlotOf(menu) == null
+
     /**
      * Silent reads only: at tier 5+ the XP is on page 2, so turn the page once and wait briefly for its items.
      * Returns true while the menu should stay open. The player's own /hotm menu is never paged.
@@ -516,9 +524,7 @@ class HotmAddon : ClientModInitializer {
         if (items.isEmpty()) return true
         if (!HotmProgress.needsSecondPageForXp(observation)) return false
         // The Next Page arrow moves to page 2. The yellow pane on page 2 is the level being worked toward.
-        val nextPage = menu.menu.slots.firstOrNull {
-            !it.item.isEmpty && (HotmProgress.isNextPageItemName(it.item.hoverName.string) || it.item.item == Items.ARROW)
-        } ?: return false
+        val nextPage = nextPageSlotOf(menu) ?: return false
         val player = minecraft.player ?: return false
         // Slot positions are the packet slot ids; never trust a renamed index field.
         val slotId = menu.menu.slots.indexOf(nextPage).takeIf { it >= 0 } ?: nextPage.index
