@@ -53,11 +53,14 @@ class AutoHotmRefreshTest {
     }
 
     @Test
-    fun `closes an unreadable menu after the timeout and drops a player-opened menu's pending read`() {
+    fun `closes an unreadable owned menu at timeout before expiring a menu that never opened`() {
         val refresh = AutoHotmRefresh()
         refresh.request(0L, 0L)
         assertTrue(refresh.poll(0L, guiOpen = false))
+        assertFalse(refresh.menuOpened(4_999L, read = false))
+        // The controller processes the open menu before expire(now); timeout must still claim closure.
         assertTrue(refresh.menuOpened(5_000L, read = false))
+        assertFalse(refresh.awaitingMenu())
 
         refresh.request(10_000L, 0L)
         assertFalse(refresh.menuOpened(10_000L, read = true))

@@ -1,3 +1,21 @@
+# SSHA 1.5.16 — Close timed-out HOTM reads
+
+- **Close owned HOTM menus after timeout.** Process the read result or timeout before expiring the request, so the timeout cannot clear ownership before the menu closes. Close both the local GUI and the server-side container.
+
+## Release artifact
+
+`build/libs/ssha_1.5.16.jar`. GitHub automatically prepares the source archive when a release is published.
+
+SHA256 `ssha_1.5.16.jar`: `b752f4890c9b9d2a44ef257884a5597b18c8aced2f6a0e026a290e459bf4960c`
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The close-after-timeout behavior has not yet been verified in Minecraft. The Next Page arrow match is also still unconfirmed in-game.
+
+---
+
 # SSHA 1.5.15 — Close completed HOTM reads and reset page state
 
 - **Close the visible HOTM screen after reading.** A completed read now closes the GUI as well as sending the container close packet.

@@ -222,7 +222,6 @@ class HotmAddon : ClientModInitializer {
         val commissionsOpen = container?.title?.string?.contains("Commissions", true) == true
         if (commissionsScreenOpen && !commissionsOpen) autoRefresh.request(now, 300L)
         commissionsScreenOpen = commissionsOpen
-        autoRefresh.expire(now)
         // Manual progress means automatic capture is paused, so no silent /hotm reads until /ssha auto resumes it.
         // A request is only consumed when a read can actually be sent (in SkyBlock, not manual).
         val readable = !AddonSettings.data.manualProgress && SkyBlockUtils.inSkyBlock
@@ -237,37 +236,44 @@ class HotmAddon : ClientModInitializer {
         hiddenMenu?.let { hidden ->
             val items = menuItems(hidden)
             val hiddenObservation = recordMenu(items)?.also(::applyObservation)
-            if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
+            // Check completion/timeout before waiting on an empty or changing page, so an
+            // owned menu can never be kept open by turnToXpPage's loading path.
             if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation))) {
                 reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
                 minecraft.player?.closeContainer()
-            } else if (!autoRefresh.awaitingMenu()) {
+            } else if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
+            else if (!autoRefresh.awaitingMenu()) {
                 // The wait expired without a usable read. Drop the claim so future silent
                 // reads are hidden again instead of flashing visible menus forever.
                 reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
-                if (minecraft.gui.screen() == null) minecraft.player?.closeContainer()
+                minecraft.player?.closeContainer()
             }
         }
 
-        val menu = container ?: return
-        if (!HotmProgress.isHotmInventoryTitle(menu.title.string)) return
-        val items = menuItems(menu)
-        val observation = recordMenu(items)?.also(::applyObservation)
-        // Our silent read missed its claim and is visible: still turn the page and close
-        // it once read. A menu the player opened themselves is never paged or closed.
-        if (hiddenMenu == null && autoRefresh.awaitingMenu() && autoRefresh.sentWithin(now, READ_OWNERSHIP_MS)) {
-            if (turnToXpPage(minecraft, menu, items, observation, now)) return
-            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
-                reportUserRead(observation)
-                pageTurnedFrom = null
-                // closeContainer() only sends the close packet; the visible screen needs gui.setScreen(null).
-                minecraft.gui.setScreen(null)
+        if (container != null && HotmProgress.isHotmInventoryTitle(container.title.string)) {
+            val items = menuItems(container)
+            val observation = recordMenu(items)?.also(::applyObservation)
+            // Our silent read missed its claim and is visible: still turn the page and close
+            // it once read. A menu the player opened themselves is never paged or closed.
+            if (hiddenMenu == null && autoRefresh.sentWithin(now, READ_OWNERSHIP_MS)) {
+                // Process completion or timeout before page-loading early returns.
+                if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
+                    reportUserRead(observation)
+                    pageTurnedFrom = null
+                    // Close both the local GUI and server-side container.
+                    minecraft.gui.setScreen(null)
+                    minecraft.player?.closeContainer()
+                } else if (autoRefresh.awaitingMenu() && turnToXpPage(minecraft, container, items, observation, now)) {
+                    return
+                }
             }
         }
+        // Only expire after any visible/hidden menu has had the chance to complete or time out.
+        autoRefresh.expire(now)
     }
 
     /** Tells the player what a /ssha auto read produced, so a silent failure is visible in-game. */
