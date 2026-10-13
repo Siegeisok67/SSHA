@@ -8,6 +8,7 @@ internal object SshaUpdateMenu {
     var latest: String? = null
     var checking: Boolean = false
     var onCheck: () -> Unit = {}
+    var onInstall: () -> Unit = {}
     var onManualDownload: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
     var onChangelog: () -> Unit = { OSUtils.openBrowser(RELEASES_PAGE) }
 
@@ -27,7 +28,7 @@ internal object SshaUpdateMenu {
     fun primaryLabel(): String = when {
         checking -> "Checking…"
         latest == null -> "Check for Updates"
-        hasUpdate() -> "Manually download"
+        hasUpdate() -> "Install Update"
         else -> "Up to date"
     }
 

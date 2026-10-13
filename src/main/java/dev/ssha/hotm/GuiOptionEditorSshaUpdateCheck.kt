@@ -8,21 +8,25 @@ import at.hannibal2.skyhanni.deps.moulconfig.gui.GuiOptionEditor
 import at.hannibal2.skyhanni.deps.moulconfig.gui.KeyboardEvent
 import at.hannibal2.skyhanni.deps.moulconfig.gui.MouseEvent
 import at.hannibal2.skyhanni.deps.moulconfig.processor.ProcessedOption
-import kotlin.math.max
 
 /**
- * SkyHanni-style About header: big red ➔ green versions, Manually download and
- * Show Changelog next to the new version number only when an update is known,
- * and a Check for Updates button below the version text.
+ * SkyHanni-style About header: big red ➔ green versions. When an update is known, Install Update,
+ * Manually download and Show Changelog sit beside the version in that order. Check for Updates
+ * sits below the version text and is always available.
  */
 class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(option), CloseEventListener {
 
+    private val install = GuiElementButton().apply { text = "Install Update" }
     private val download = GuiElementButton().apply { text = "Manually download" }
     private val changelog = GuiElementButton().apply { text = "Show Changelog" }
     private val check = GuiElementButton()
 
     private companion object {
+        const val INSTALL_Y = 10
+        const val DOWNLOAD_Y = 30
+        const val CHANGELOG_Y = 50
         const val CHECK_Y = 38
+        const val HEIGHT = 74
     }
 
     override fun render(context: RenderContext, x: Int, y: Int, width: Int) {
@@ -34,13 +38,17 @@ class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(
         val update = SshaUpdateMenu.hasUpdate()
 
         if (update) {
+            install.width = install.getWidth(context)
+            install.render(context, getInstallPosition(adjustedWidth), INSTALL_Y)
             download.width = download.getWidth(context)
-            download.render(context, getDownloadPosition(adjustedWidth), 10)
+            download.render(context, getDownloadPosition(adjustedWidth), DOWNLOAD_Y)
             changelog.width = changelog.getWidth(context)
-            changelog.render(context, getChangelogPosition(adjustedWidth), 30)
+            changelog.render(context, getChangelogPosition(adjustedWidth), CHANGELOG_Y)
         }
 
-        val widthRemaining = if (update) adjustedWidth - max(download.width, changelog.width) - 10 else adjustedWidth
+        val widthRemaining = if (update) {
+            adjustedWidth - maxOf(install.width, download.width, changelog.width) - 10
+        } else adjustedWidth
 
         context.scale(2F, 2F)
         context.drawStringCenteredScaledMaxWidth(
@@ -60,19 +68,20 @@ class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(
         check.render(context, x + 10, y + CHECK_Y)
     }
 
+    private fun getInstallPosition(width: Int) = width - install.width
     private fun getDownloadPosition(width: Int) = width - download.width
     private fun getChangelogPosition(width: Int) = width - changelog.width
-    override fun getHeight(): Int {
-        return 62
-    }
+    override fun getHeight(): Int = HEIGHT
 
     private var wasMouseButtonDown = false
+    private var wasInsideInstall = false
     private var wasInsideDownload = false
     private var wasInsideChangelog = false
     private var wasInsideCheck = false
 
     override fun onAfterClose() {
         wasMouseButtonDown = false
+        wasInsideInstall = false
         wasInsideDownload = false
         wasInsideChangelog = false
         wasInsideCheck = false
@@ -97,13 +106,16 @@ class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(
 
         val isMouseButtonDown = event.mouseState
         val update = SshaUpdateMenu.hasUpdate()
-        val isInsideDownload = update && isInside(getDownloadPosition(width - 20), height = 10, download)
-        val isInsideChangelog = update && isInside(getChangelogPosition(width - 20), height = 30, changelog)
+        val isInsideInstall = update && isInside(getInstallPosition(width - 20), height = INSTALL_Y, install)
+        val isInsideDownload = update && isInside(getDownloadPosition(width - 20), height = DOWNLOAD_Y, download)
+        val isInsideChangelog = update && isInside(getChangelogPosition(width - 20), height = CHANGELOG_Y, changelog)
         // The check button renders untranslated at x + 10, so its exact hit box needs the +10.
         val isInsideCheck = isInside(10, CHECK_Y, check)
 
         // We want to trigger the action when the user releases their mouse button, because this is
         // the standard expectation for most UIs
+        val installClicked =
+            wasInsideInstall && isInsideInstall && wasMouseButtonDown && !isMouseButtonDown
         val downloadClicked =
             wasInsideDownload && isInsideDownload && wasMouseButtonDown && !isMouseButtonDown
         val changelogClicked =
@@ -112,11 +124,17 @@ class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(
             wasInsideCheck && isInsideCheck && wasMouseButtonDown && !isMouseButtonDown
 
         wasMouseButtonDown = isMouseButtonDown
+        wasInsideInstall = isInsideInstall
         wasInsideDownload = isInsideDownload
         wasInsideChangelog = isInsideChangelog
         wasInsideCheck = isInsideCheck
 
         return when {
+            installClicked -> {
+                SshaUpdateMenu.onInstall()
+                true
+            }
+
             downloadClicked -> {
                 SshaUpdateMenu.onManualDownload()
                 true
@@ -141,7 +159,7 @@ class GuiOptionEditorSshaUpdateCheck(option: ProcessedOption) : GuiOptionEditor(
     }
 
     override fun fulfillsSearch(word: String): Boolean {
-        return super.fulfillsSearch(word) || word in "download" || word in "update" || word in "check"
+        return super.fulfillsSearch(word) || word in "install" || word in "download" || word in "update" || word in "check"
     }
 
     private fun String.asStructuredText() = StructuredText.of(this)

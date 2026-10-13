@@ -34,10 +34,11 @@ internal object AddonConfigMenu {
         resetPowder: () -> Unit,
         checkForUpdates: () -> Unit,
         resetAllGrinding: () -> Unit,
+        installUpdate: () -> Unit = {},
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
             { message -> SshaChat.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding)
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding, installUpdate)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -60,11 +61,13 @@ class AddonMenuConfig internal constructor(
     resetPowder: () -> Unit = {},
     checkForUpdates: () -> Unit = {},
     resetAllGrinding: () -> Unit = {},
+    installUpdate: () -> Unit = {},
 ) : Config() {
     @Expose @JvmField
     @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
     val about = AboutMenuConfig().also {
         SshaUpdateMenu.onCheck = checkForUpdates
+        SshaUpdateMenu.onInstall = installUpdate
         SshaUpdateMenu.onManualDownload = { OSUtils.openBrowser(RELEASES_PAGE) }
         SshaUpdateMenu.onChangelog = { OSUtils.openBrowser(RELEASES_PAGE) }
     }

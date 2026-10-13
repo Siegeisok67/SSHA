@@ -177,7 +177,8 @@ class HotmAddon : ClientModInitializer {
                 moveGrinding = grindingIntegration::move, resetGrindingPosition = grindingIntegration::resetPosition,
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
                 resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
-                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved)
+                checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved,
+                installUpdate = ::installAvailableUpdate)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)

@@ -82,6 +82,14 @@ class AddonConfigMenuTest {
     }
 
     @Test
+    fun `about install button runs the injected install flow`() {
+        var installs = 0
+        AddonMenuConfig(AddonSettingsData(), {}, {}, {}, {}, {}, {}, installUpdate = { installs++ })
+        SshaUpdateMenu.onInstall()
+        assertEquals(1, installs)
+    }
+
+    @Test
     fun `version header shows SkyHanni-style big text states`() {
         SshaUpdateMenu.checking = false
         SshaUpdateMenu.installed = "1.4.7"
@@ -93,7 +101,7 @@ class AddonConfigMenuTest {
         SshaUpdateMenu.latest = "9.9.9"
         assertTrue(SshaUpdateMenu.hasUpdate())
         assertEquals("§c1.4.7➜ §a9.9.9", SshaUpdateMenu.versionText())
-        assertEquals("Manually download", SshaUpdateMenu.primaryLabel())
+        assertEquals("Install Update", SshaUpdateMenu.primaryLabel())
         assertEquals("Check for Updates", SshaUpdateMenu.checkLabel())
         SshaUpdateMenu.latest = "1.4.7"
         assertFalse(SshaUpdateMenu.hasUpdate())
@@ -154,7 +162,7 @@ class AddonConfigMenuTest {
         }
         val versionOption = checkNotNull(processor.getOptionFromField(AboutMenuConfig::class.java.getField("currentVersion")))
         assertTrue(versionOption.editor is GuiOptionEditorSshaUpdateCheck)
-        assertEquals(62, versionOption.editor.height)
+        assertEquals(74, versionOption.editor.height)
         listOf("enabled", "overflowWarning", "showStored", "showSession", "smoothRate", "move").forEach { field ->
             assertNotNull(processor.getOptionFromField(GrindingWidgetMenuConfig::class.java.getField(field)), field)
         }

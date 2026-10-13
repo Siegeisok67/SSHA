@@ -1,3 +1,19 @@
+# SSHA 1.5.9 — In-game Install Update button
+
+- **Install Update is back in the About menu.** When a newer stable release is known, the header shows Install Update, Manually download and Show Changelog beside the version. Install Update runs the same verified download as the chat prompt, and Check for Updates stays below the version text.
+
+## Release artifact
+
+`build/libs/ssha_1.5.9.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The new About button layout and the install flow still need in-game verification. The tier can still read differently with the HOTM menu open versus closed; not fixed in this release.
+
+---
+
 # SSHA 1.4.9 — Commission XP refresh, /ssha auto feedback
 
 - **XP left refreshes after the last commission.** The refresh used to fire only while the commissions widget was still on screen, so finishing the last commission left XP left stale. It now also fires when the widget disappears inside the mining area.
