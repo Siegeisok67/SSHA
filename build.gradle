@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'dev.ssha'
-version = '1.5.16'
+version = '1.5.17'
 
 base {
     archivesName = 'ssha'

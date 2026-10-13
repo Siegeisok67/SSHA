@@ -1,3 +1,21 @@
+# SSHA 1.5.17 — Keep HOTM read ownership for late menus
+
+- **Claim late /hotm menus.** The server can deliver `/hotm` after the 5-second read timer expires. Read ownership now lasts 10 seconds after sending, and a menu arriving in that window gets a fresh read timer before it is closed.
+
+## Release artifact
+
+`build/libs/ssha_1.5.17.jar`. GitHub automatically prepares the source archive when a release is published.
+
+SHA256 `ssha_1.5.17.jar`: `835113cc8c3b328ed609068d73a23231dc307bea0d6573469ee62b876f3c5b8d`
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The late-menu claim has passed automated tests but has not yet been verified in Minecraft.
+
+---
+
 # SSHA 1.5.16 — Close timed-out HOTM reads
 
 - **Close owned HOTM menus after timeout.** Process the read result or timeout before expiring the request, so the timeout cannot clear ownership before the menu closes. Close both the local GUI and the server-side container.
