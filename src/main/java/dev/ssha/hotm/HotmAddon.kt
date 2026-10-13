@@ -259,21 +259,24 @@ class HotmAddon : ClientModInitializer {
             val observation = recordMenu(items)?.also(::applyObservation)
             // Our silent read missed its claim and is visible: still turn the page and close
             // it once read. A menu the player opened themselves is never paged or closed.
-            if (hiddenMenu == null && autoRefresh.sentWithin(now, READ_OWNERSHIP_MS)) {
-                // Process completion or timeout before page-loading early returns.
+            if (hiddenMenu == null && autoRefresh.claimMenu(now, READ_OWNERSHIP_MS)) {
+                // Allow a page turn to restart the timeout before the timeout branch consumes this menu.
+                val shouldWaitForPage = turnToXpPage(minecraft, container, items, observation, now)
                 if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
                     reportUserRead(observation)
                     pageTurnedFrom = null
                     // Close both the local GUI and server-side container.
                     minecraft.gui.setScreen(null)
                     minecraft.player?.closeContainer()
-                } else if (autoRefresh.awaitingMenu() && turnToXpPage(minecraft, container, items, observation, now)) {
+                } else if (shouldWaitForPage) {
                     return
                 }
             }
         }
-        // Only expire after any visible/hidden menu has had the chance to complete or time out.
-        autoRefresh.expire(now)
+        // Keep ownership long enough to claim a server menu that arrives late, then report a true timeout.
+        if (autoRefresh.expire(now, READ_OWNERSHIP_MS)) {
+            reportUserRead(null, "SSHA did not receive the HOTM menu in time.")
+        }
     }
 
     /** Tells the player what a /ssha auto read produced, so a silent failure is visible in-game. */
@@ -531,8 +534,9 @@ class HotmAddon : ClientModInitializer {
     /** Called from the Gui.setScreen mixin: hides the HOTM menu our silent read opened instead of showing it. */
     private fun claimSilentMenu(screen: Screen): Boolean {
         val container = screen as? AbstractContainerScreen<*> ?: return false
-        if (!autoRefresh.awaitingMenu() || hiddenMenu != null) return false
+        if (hiddenMenu != null) return false
         if (!HotmProgress.isHotmInventoryTitle(container.title.string)) return false
+        if (!autoRefresh.claimMenu(nowMillis(), READ_OWNERSHIP_MS)) return false
         hiddenMenu = container
         return true
     }

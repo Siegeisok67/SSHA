@@ -68,13 +68,26 @@ class AutoHotmRefreshTest {
     }
 
     @Test
-    fun `expires a read that never opens a menu`() {
+    fun `late HOTM menu is claimable after read timer expires and gets fresh wait`() {
         val refresh = AutoHotmRefresh()
         refresh.request(0L, 0L)
         assertTrue(refresh.poll(0L, guiOpen = false))
-        refresh.expire(4_999L)
-        refresh.expire(5_000L)
-        assertFalse(refresh.menuOpened(6_000L, read = false))
-        assertFalse(refresh.menuOpened(7_000L, read = true))
+        assertFalse(refresh.expire(5_000L, ownershipWindowMs = 10_000L))
+        assertFalse(refresh.awaitingMenu())
+        assertTrue(refresh.claimMenu(6_000L, windowMs = 10_000L))
+        assertFalse(refresh.menuOpened(10_999L, read = false))
+        assertTrue(refresh.menuOpened(11_000L, read = false))
+        assertFalse(refresh.claimMenu(11_001L, windowMs = 10_000L))
+    }
+
+    @Test
+    fun `expires a read that never opens a menu after the ownership window`() {
+        val refresh = AutoHotmRefresh()
+        refresh.request(0L, 0L)
+        assertTrue(refresh.poll(0L, guiOpen = false))
+        assertFalse(refresh.expire(5_000L, ownershipWindowMs = 10_000L))
+        assertFalse(refresh.claimMenu(10_001L, windowMs = 10_000L))
+        assertTrue(refresh.expire(10_001L, ownershipWindowMs = 10_000L))
+        assertFalse(refresh.menuOpened(11_000L, read = false))
     }
 }

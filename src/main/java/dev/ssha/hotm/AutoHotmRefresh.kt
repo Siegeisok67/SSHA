@@ -36,6 +36,8 @@ internal class AutoHotmRefresh(
     private var dueAt: Long? = null
     private var lastSentAt: Long? = null
     private var awaitingSince: Long? = null
+    private var activeRead = false
+    private var menuClaimed = false
 
     /** Latest request wins. Use delayMs to let the server finish updating after a claim. */
     fun request(now: Long, delayMs: Long) {
@@ -62,6 +64,8 @@ internal class AutoHotmRefresh(
         dueAt = null
         lastSentAt = now
         awaitingSince = now
+        activeRead = true
+        menuClaimed = false
         return true
     }
 
@@ -72,9 +76,24 @@ internal class AutoHotmRefresh(
     fun menuOpened(now: Long, read: Boolean): Boolean {
         // A fresh HOTM menu is already on screen, so a pending read is redundant.
         dueAt = null
+        if (!activeRead) return false
         val since = awaitingSince ?: return false
         if (!read && now - since < readTimeoutMs) return false
         awaitingSince = null
+        activeRead = false
+        menuClaimed = false
+        return true
+    }
+
+    /**
+     * Claim the first HOTM menu opened shortly after our command. The server can deliver it after
+     * the initial read wait expired; seeing it starts a fresh menu/page read window.
+     */
+    fun claimMenu(now: Long, windowMs: Long): Boolean {
+        if (!activeRead || !sentWithin(now, windowMs)) return false
+        if (menuClaimed) return true
+        menuClaimed = true
+        awaitingSince = now
         return true
     }
 
@@ -92,9 +111,19 @@ internal class AutoHotmRefresh(
         return now - last in 0L..windowMs
     }
 
-    /** Stop waiting for a menu that never opened. */
-    fun expire(now: Long) {
-        val since = awaitingSince ?: return
-        if (now - since >= readTimeoutMs) awaitingSince = null
+    /**
+     * Let a late server menu still be claimed for [ownershipWindowMs] after /hotm was sent.
+     * Once claimed, only menuOpened may finish it; before claim, the shorter read timeout just
+     * drops the wait timer, not ownership of the expected menu.
+     * @return true once the request's ownership window expires without a menu.
+     */
+    fun expire(now: Long, ownershipWindowMs: Long = 10_000L): Boolean {
+        if (!activeRead || menuClaimed) return false
+        val since = awaitingSince
+        if (since != null && now - since >= readTimeoutMs) awaitingSince = null
+        if (sentWithin(now, ownershipWindowMs)) return false
+        activeRead = false
+        awaitingSince = null
+        return true
     }
 }
