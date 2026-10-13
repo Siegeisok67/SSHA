@@ -227,6 +227,8 @@ class HotmAddon : ClientModInitializer {
         // A request is only consumed when a read can actually be sent (in SkyBlock, not manual).
         val readable = !AddonSettings.data.manualProgress && SkyBlockUtils.inSkyBlock
         if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null, enabled = readable)) {
+            // A new read starts from page 1; a stale page-turn record would skip the next turn.
+            pageTurnedFrom = null
             minecraft.player?.connection?.sendCommand("hotm")
         }
         if (userReadPending && !readable) reportUserRead(null, "SSHA waits for SkyBlock before reading HOTM.")
@@ -261,7 +263,9 @@ class HotmAddon : ClientModInitializer {
             if (turnToXpPage(minecraft, menu, items, observation, now)) return
             if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
                 reportUserRead(observation)
-                minecraft.player?.closeContainer()
+                pageTurnedFrom = null
+                // closeContainer() only sends the close packet; the visible screen needs gui.setScreen(null).
+                minecraft.gui.setScreen(null)
             }
         }
     }

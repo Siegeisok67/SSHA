@@ -1,3 +1,22 @@
+# SSHA 1.5.15 — Close completed HOTM reads and reset page state
+
+- **Close the visible HOTM screen after reading.** A completed read now closes the GUI as well as sending the container close packet.
+- **Reset page-turn state between reads.** Each new `/ssha auto` starts from page 1, so later reads can turn to page 2 again.
+
+## Release artifact
+
+`build/libs/ssha_1.5.15.jar`. GitHub automatically prepares the source archive when a release is published.
+
+SHA256 `ssha_1.5.15.jar`: `5647839bfbd6bc1dcdcfba4c78985528ea821b0da4ebcab422de76d623d7545f`
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The fixes passed automated tests but have not yet been verified in Minecraft. The Next Page arrow match also remains unconfirmed in-game.
+
+---
+
 # SSHA 1.5.13 — Page-two XP reads, tier floor fix
 
 - **Silent reads reach page 2.** At tier 5 to 9 the XP is on page 2, so a silent read right-clicks the Next Page arrow once.
