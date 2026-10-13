@@ -15,6 +15,22 @@ internal class AutoHotmRefresh(
         /** Claim-time reward text only. "Commission Complete! Visit the King..." is not a reward. */
         fun isRewardMessage(text: String): Boolean =
             rewardPattern.containsMatchIn(text) && !text.contains("visit", ignoreCase = true)
+
+        /**
+         * True when a commission finished and XP left needs a fresh /hotm read. The tab widget
+         * can vanish once the last commission completes, so a missing widget counts as finished
+         * when we were tracking commissions inside the mining area.
+         */
+        fun commissionsFinished(
+            previousCount: Int,
+            currentCount: Int,
+            widgetActive: Boolean,
+            inMiningArea: Boolean,
+        ): Boolean {
+            if (previousCount <= currentCount) return false
+            if (widgetActive) return true
+            return inMiningArea && currentCount == 0
+        }
     }
 
     private var dueAt: Long? = null
@@ -26,9 +42,13 @@ internal class AutoHotmRefresh(
         dueAt = now + delayMs
     }
 
-    /** True when the caller should send /hotm now. */
-    fun poll(now: Long, guiOpen: Boolean): Boolean {
+    /**
+     * True when the caller should send /hotm now. [enabled] false (not in SkyBlock, or manual
+     * progress) leaves the request pending instead of consuming it, so it runs once a read is possible.
+     */
+    fun poll(now: Long, guiOpen: Boolean, enabled: Boolean = true): Boolean {
         val due = dueAt ?: return false
+        if (!enabled) return false
         if (now < due) return false
         if (guiOpen) {
             if (now - due >= staleMs) dueAt = null

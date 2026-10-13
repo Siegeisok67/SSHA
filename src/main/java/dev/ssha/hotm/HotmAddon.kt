@@ -49,6 +49,8 @@ class HotmAddon : ClientModInitializer {
     // Silent-read menu that the Gui.setScreen mixin kept off screen; closed once its data arrives.
     private var hiddenMenu: AbstractContainerScreen<*>? = null
     private var settingsRequested = false
+    // Set by /ssha auto so its outcome is reported in chat; silent periodic reads stay quiet.
+    private var userReadPending = false
     private var nextStatsSaveAt = 0L
     private val logger = LoggerFactory.getLogger("SSHA Update")
     private var pendingUpdate: PotentialUpdate? = null
@@ -203,7 +205,11 @@ class HotmAddon : ClientModInitializer {
         )
         val previousCommissions = AddonSettings.data.activeCommissions
         // A collected commission leaves the tab widget; re-read /hotm so the commissions-left estimate catches up.
-        if (TabWidget.COMMISSIONS.isActive && commissions.size < previousCommissions.size) autoRefresh.request(now, 300L)
+        // Covers the last commission finishing, when the commissions widget disappears entirely.
+        if (AutoHotmRefresh.commissionsFinished(
+                previousCommissions.size, commissions.size, TabWidget.COMMISSIONS.isActive,
+                inMiningArea = minecraft.player != null && MiningArea.current(),
+            )) autoRefresh.request(now, 300L)
         if (commissions != previousCommissions) {
             AddonSettings.data.activeCommissions = commissions
             AddonSettings.save()
@@ -216,9 +222,12 @@ class HotmAddon : ClientModInitializer {
         commissionsScreenOpen = commissionsOpen
         autoRefresh.expire(now)
         // Manual progress means automatic capture is paused, so no silent /hotm reads until /ssha auto resumes it.
-        if (!AddonSettings.data.manualProgress && autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null) && SkyBlockUtils.inSkyBlock) {
+        // A request is only consumed when a read can actually be sent (in SkyBlock, not manual).
+        val readable = !AddonSettings.data.manualProgress && SkyBlockUtils.inSkyBlock
+        if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null, enabled = readable)) {
             minecraft.player?.connection?.sendCommand("hotm")
         }
+        if (userReadPending && !readable) reportUserRead(null, "SSHA waits for SkyBlock before reading HOTM.")
 
         // A hidden silent-read menu never reached the screen; finish reading it, then close it.
         hiddenMenu?.let { hidden ->
@@ -226,12 +235,14 @@ class HotmAddon : ClientModInitializer {
             val hiddenObservation = recordMenu(items)?.also(::applyObservation)
             if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
             if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation))) {
+                reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
                 minecraft.player?.closeContainer()
             } else if (!autoRefresh.awaitingMenu()) {
                 // The wait expired without a usable read. Drop the claim so future silent
                 // reads are hidden again instead of flashing visible menus forever.
+                reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
                 if (minecraft.gui.screen() == null) minecraft.player?.closeContainer()
@@ -246,8 +257,23 @@ class HotmAddon : ClientModInitializer {
         // it once read. A menu the player opened themselves is never paged or closed.
         if (hiddenMenu == null && autoRefresh.awaitingMenu() && autoRefresh.sentWithin(now, READ_OWNERSHIP_MS)) {
             if (turnToXpPage(minecraft, menu, items, observation, now)) return
-            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) minecraft.player?.closeContainer()
+            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation))) {
+                reportUserRead(observation)
+                minecraft.player?.closeContainer()
+            }
         }
+    }
+
+    /** Tells the player what a /ssha auto read produced, so a silent failure is visible in-game. */
+    private fun reportUserRead(observation: HotmProgress.Observation?, failureReason: String? = null) {
+        if (!userReadPending) return
+        userReadPending = false
+        if (failureReason != null || observation == null) {
+            notify("§c${failureReason ?: "SSHA could not read HOTM."} Open /hotm once, then run /ssha menu and send its output.")
+            return
+        }
+        val xp = observation.xpToNextTier?.prettyNumber() ?: "not captured yet"
+        notify("§aSSHA read HOTM: tier ${observation.tier ?: "unknown"}, XP left $xp.")
     }
 
     /** Every login surfaces a known pending update without another network check. Only the first
@@ -513,6 +539,7 @@ class HotmAddon : ClientModInitializer {
         val runAuto: () -> Unit = {
             settings().resumeAutomaticProgress()
             saveSettings()
+            userReadPending = true
             readHotm()
         }
         command.executes {

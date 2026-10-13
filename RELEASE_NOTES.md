@@ -1,3 +1,20 @@
+# SSHA 1.4.9 — Commission XP refresh, /ssha auto feedback
+
+- **XP left refreshes after the last commission.** The refresh used to fire only while the commissions widget was still on screen, so finishing the last commission left XP left stale. It now also fires when the widget disappears inside the mining area.
+- **`/ssha auto` reports its result.** A request made outside SkyBlock now waits for SkyBlock instead of being dropped, and the chat reply shows the tier and XP left, or what went wrong.
+
+## Release artifact
+
+`build/libs/ssha_1.4.9.jar`. GitHub automatically prepares the source archive when a release is published.
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+The tier can still read differently with the HOTM menu open versus closed: page 1 and page 2 of a silent read can disagree. Not fixed in this release. In-game verification of the commission refresh and `/ssha auto` is pending.
+
+---
+
 # SSHA 1.4.8 — Tier anchor, sack freshness, silent-read repairs, About/Extra menu
 
 - **Tier no longer flip-flops while browsing /hotm.** The summary item's level line is anchored to the unlocked `Tier N` / `HOTM N` selector rows (its XP is kept), so a display buff reading one high can't outrank row truth; hovers with no menu scan yet are ignored.

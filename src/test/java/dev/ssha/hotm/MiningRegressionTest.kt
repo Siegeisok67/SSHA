@@ -56,6 +56,29 @@ class MiningRegressionTest {
     }
 
     @Test
+    fun `finishing the last commission triggers a refresh even when the widget disappears`() {
+        // Widget still visible and one fewer commission: refresh (original behavior).
+        assertTrue(AutoHotmRefresh.commissionsFinished(2, 1, widgetActive = true, inMiningArea = true))
+        // Last commission done and the widget is gone: this used to skip the refresh entirely.
+        assertTrue(AutoHotmRefresh.commissionsFinished(1, 0, widgetActive = false, inMiningArea = true))
+        // Nothing finished, or the count grew: no refresh.
+        assertFalse(AutoHotmRefresh.commissionsFinished(1, 1, widgetActive = true, inMiningArea = true))
+        assertFalse(AutoHotmRefresh.commissionsFinished(1, 2, widgetActive = false, inMiningArea = true))
+        // Leaving the mining area hides the widget; that is not a finished commission.
+        assertFalse(AutoHotmRefresh.commissionsFinished(1, 0, widgetActive = false, inMiningArea = false))
+    }
+
+    @Test
+    fun `auto read waits for a readable state instead of being consumed`() {
+        val refresh = AutoHotmRefresh()
+        refresh.request(0L, 0L)
+        // Outside SkyBlock the request must survive, not vanish with no /hotm sent.
+        assertFalse(refresh.poll(1_000L, guiOpen = false, enabled = false))
+        assertTrue(refresh.poll(2_000L, guiOpen = false, enabled = true))
+        assertFalse(refresh.poll(3_000L, guiOpen = false, enabled = true))
+    }
+
+    @Test
     fun `overflow warns once at capacity rearms and respects toggle`() {
         val sacks = SackSnapshot()
         sacks.read("MITHRIL_ORE", listOf("Stored: 221,799/221.8k"))
