@@ -1,14 +1,15 @@
-# SSHA 1.5.10 — Page-two XP reads, tier floor fix
+# SSHA 1.5.13 — Page-two XP reads, tier floor fix
 
-- **Silent reads reach page 2.** At tier 5 to 9 the XP is on page 2, so a silent read right-clicks the Next Page arrow once. The read window restarts after the turn, so page 2 gets its full wait.
+- **Silent reads reach page 2.** At tier 5 to 9 the XP is on page 2, so a silent read right-clicks the Next Page arrow once.
+- **Read window restarts after the turn.** Page 2 gets its full wait instead of sharing the first window.
 - **Page 1 can't lower your tier.** Page 1 only lists tiers 1 to 5, so a tier 5 read at tier 6 is ignored. Only an XP-bearing read can lower the stored tier.
 - **HOTM 10 needs no page turn.** At max tier there is no next level, so a read finishes without turning.
 
 ## Release artifact
 
-`build/libs/ssha_1.5.10.jar`. GitHub automatically prepares the source archive when a release is published.
+`build/libs/ssha_1.5.13.jar`. GitHub automatically prepares the source archive when a release is published.
 
-SHA256 `ssha_1.5.10.jar`: `b90cec5bd429afa13c8929c7a33b86fb8b17da61b4ad2ae8a5150441a1a70173`
+SHA256 `ssha_1.5.13.jar`: `6d1a17c7b6f8cb0055f2b8d9ffc4fa9e6e1863694d3f03ba485f8990263c8661`
 
 Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
 
