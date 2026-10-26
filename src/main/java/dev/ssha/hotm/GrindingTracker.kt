@@ -57,6 +57,56 @@ internal data class GrindingWidgetSettings(
     var position: HudPositionData = HudPositionData(8, 150),
 )
 
+internal data class RareSackSettings(
+    var enabled: Boolean = false,
+    var position: HudPositionData = HudPositionData(8, 550),
+)
+
+/** Positive sack events only; never infer gains from a cached sack total. */
+internal class RareSackTracker {
+    companion object {
+        const val MINERAL = "REFINED_MINERAL"
+        const val GEMSTONE = "GLOSSY_GEMSTONE"
+    }
+    var minerals: Long = 0L
+        private set
+    var gemstones: Long = 0L
+        private set
+    private var startedAt: Long? = null
+
+    fun changes(deltas: Map<String, Long>, now: Long, active: Boolean, incompleteRemovals: Boolean = false) {
+        // A mixed sack packet can be a transfer or crafting operation, not a mining drop.
+        if (!active || incompleteRemovals || deltas.values.any { it < 0L }) return
+        val mineral = deltas[MINERAL]?.coerceAtLeast(0L) ?: 0L
+        val gemstone = deltas[GEMSTONE]?.coerceAtLeast(0L) ?: 0L
+        if (mineral == 0L && gemstone == 0L) return
+        if (startedAt == null) startedAt = now
+        minerals += mineral
+        gemstones += gemstone
+    }
+
+    fun perHour(count: Long, now: Long): Double? = startedAt?.let { start ->
+        (now - start).takeIf { it >= 60_000L }?.let { count.toDouble() * 3_600_000.0 / it }
+    }
+
+    data class Valuation(val minerals: Double?, val gemstones: Double?) {
+        val knownTotal: Double get() = (minerals ?: 0.0) + (gemstones ?: 0.0)
+        val partial: Boolean get() = minerals == null || gemstones == null
+    }
+
+    /** Market estimate for items gained in this session, not realized sale profit. */
+    fun valuation(instantSell: (String) -> Double?): Valuation {
+        fun coins(id: String, count: Long): Double? {
+            if (count == 0L) return 0.0
+            val price = instantSell(id)?.takeIf { it.isFinite() && it > 0.0 } ?: return null
+            return count * price
+        }
+        return Valuation(coins(MINERAL, minerals), coins(GEMSTONE, gemstones))
+    }
+
+    fun reset() { minerals = 0L; gemstones = 0L; startedAt = null }
+}
+
 internal data class GrindingSettingsData(
     var gold: GrindingWidgetSettings = GrindingWidgetSettings(compactAt = GrindingMaterial.GOLD.defaultThreshold),
     var diamond: GrindingWidgetSettings = GrindingWidgetSettings(compactAt = GrindingMaterial.DIAMOND.defaultThreshold, position = HudPositionData(8, 200)),
@@ -65,6 +115,7 @@ internal data class GrindingSettingsData(
     var umber: GrindingWidgetSettings = GrindingWidgetSettings(compactAt = GrindingMaterial.UMBER.defaultThreshold, position = HudPositionData(8, 350)),
     var tungsten: GrindingWidgetSettings = GrindingWidgetSettings(compactAt = GrindingMaterial.TUNGSTEN.defaultThreshold, position = HudPositionData(8, 400)),
     var jewels: GrindingWidgetSettings = GrindingWidgetSettings(compactAt = 3L, position = HudPositionData(8, 450)),
+    var rareSacks: RareSackSettings = RareSackSettings(),
 ) {
     operator fun get(material: GrindingMaterial): GrindingWidgetSettings = when (material) {
         GrindingMaterial.GOLD -> gold

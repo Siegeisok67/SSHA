@@ -1,3 +1,23 @@
+# SSHA 1.5.19 — Cole Profit Tracker and safer HOTM reads
+
+- **Cole Profit Tracker.** Enable the separate widget in Grinding to count Refined Mineral and Glossy Gemstone sack additions during mining and estimate their session coin value at current Bazaar instant-sell prices. Missing prices are marked partial. It starts disabled and resets on profile change or by its Reset Session button. Mixed sack removals are not treated as mining drops.
+- **Safer HOTM reads.** Defer automatic `/hotm` until the player has been still for half a second. If movement starts while an owned menu is open, close it immediately without paging. Otherwise keep the menu for at least 0.25 seconds, and close at 1 second even if XP is still missing; turning pages no longer extends that deadline.
+- **Powder session correction.** Chest rewards already observed when leaving a mining area are retained instead of being discarded during the reconciliation delay.
+
+## Release artifact
+
+`build/libs/ssha_1.5.19.jar`. GitHub automatically prepares the source archive when a release is published.
+
+SHA256 `ssha_1.5.19.jar`: `94965aca4646492bdf128b6f8acc04962a27142816ce8274c2c5ea1be07d6012`
+
+Requires Minecraft 26.2, Java 25, Fabric Loader/API/Language Kotlin and compatible SkyHanni 9.0.0+.
+
+## Limits
+
+Not yet verified in Minecraft. Sack item IDs and the menu timing need confirmation against live Hypixel data. A page-2 read that takes longer than one second will report `XP left not captured` instead of waiting. Pausing while the player is moving can leave HUD progress temporarily stale.
+
+---
+
 # SSHA 1.5.18 — Faster HOTM read close, accurate read messages
 
 - **Close reads that can't reach XP.** At tier 5+ the XP is on page 2. If the menu has no Next Page arrow, the silent read now closes at once instead of holding the menu for the 5-second timeout.

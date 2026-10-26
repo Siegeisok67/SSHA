@@ -14,6 +14,7 @@ class GrindingMenuConfig internal constructor(
     private val resetPosition: (GrindingMaterial) -> Unit, private val reset: (GrindingMaterial) -> Unit, private val notify: (String) -> Unit,
     powderSettings: PowderSettingsData, movePowder: () -> Unit, resetPowderPosition: () -> Unit, resetPowder: () -> Unit,
     private val resetAllAction: () -> Unit,
+    rareSettings: RareSackSettings, moveRare: () -> Unit, resetRarePosition: () -> Unit, resetRare: () -> Unit,
 ) {
     private fun widget(material: GrindingMaterial) = GrindingWidgetMenuConfig(settings[material], save,
         { move(material) }, { resetPosition(material) }, { reset(material) }, notify)
@@ -32,11 +33,29 @@ class GrindingMenuConfig internal constructor(
     val tungsten = widget(GrindingMaterial.TUNGSTEN)
     @Expose @JvmField @ConfigOption(name = "Glacite Jewels", desc = "Sack gains plus inventory drops in mineshafts and walker areas. Three jewels per Bejeweled Handle for key crafting.") @Accordion
     val jewels = widget(GrindingMaterial.JEWELS)
+    @Expose @JvmField @ConfigOption(name = "Cole Profit Tracker", desc = "Estimate the instant-sell value of Refined Minerals and Glossy Gemstones gained in mining areas from sack changes.") @Accordion
+    val rareSacks = RareSackMenuConfig(rareSettings, save, moveRare, resetRarePosition, resetRare)
     @Expose @JvmField @ConfigOption(name = "Mithril Powder", desc = "Dwarven Mines powder/hour, active time, event gains, and estimated Bazaar value from enchanted mithril/titanium and observed event drops. Not realized sale profit; no forge-time speculation.") @Accordion
     val powder = PowderWidgetMenuConfig(powderSettings, save, movePowder, resetPowderPosition, resetPowder)
 
     @JvmField @ConfigOption(name = "Reset All Saved Tracker Data", desc = "Permanently clear every saved grinding and mithril powder tracker for all SkyBlock profiles, including totals and active time. Settings and widget positions are kept.") @ConfigEditorButton(buttonText = "Reset")
     val resetAllSaved = Runnable { resetAllAction() }
+}
+
+class RareSackMenuConfig internal constructor(
+    settings: RareSackSettings, save: () -> Unit, move: () -> Unit, resetPosition: () -> Unit, reset: () -> Unit,
+) {
+    @Expose @JvmField @ConfigOption(name = "Enabled", desc = "Off by default. Show session drop counts and estimated Bazaar instant-sell coins from positive sack deltas while mining.") @ConfigEditorBoolean
+    val enabled = Property.wrap(object : GetSetter<Boolean> {
+        override fun get(): Boolean = settings.enabled
+        override fun set(value: Boolean) { settings.enabled = value; save() }
+    })
+    @JvmField @ConfigOption(name = "Move Widget", desc = "Move and resize the Cole Profit Tracker.") @ConfigEditorButton(buttonText = "Move")
+    val move = Runnable { move() }
+    @JvmField @ConfigOption(name = "Reset Position", desc = "Reset the Cole Profit Tracker position.") @ConfigEditorButton(buttonText = "Reset")
+    val resetPosition = Runnable { resetPosition() }
+    @JvmField @ConfigOption(name = "Reset Session", desc = "Clear this session's drop counts and estimated profit.") @ConfigEditorButton(buttonText = "Reset")
+    val resetSession = Runnable { reset() }
 }
 
 class PowderWidgetMenuConfig internal constructor(

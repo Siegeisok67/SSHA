@@ -46,10 +46,11 @@ class AutoHotmRefreshTest {
         val refresh = AutoHotmRefresh()
         refresh.request(0L, 0L)
         assertTrue(refresh.poll(0L, guiOpen = false))
-        assertFalse(refresh.menuOpened(100L, read = false))
-        assertTrue(refresh.menuOpened(200L, read = true))
+        assertTrue(refresh.claimMenu(100L, windowMs = 10_000L))
+        assertFalse(refresh.menuOpened(200L, read = true))
+        assertTrue(refresh.menuOpened(350L, read = true))
         // Once closed, a menu opened by the player is left alone.
-        assertFalse(refresh.menuOpened(300L, read = true))
+        assertFalse(refresh.menuOpened(400L, read = true))
     }
 
     @Test
@@ -57,9 +58,10 @@ class AutoHotmRefreshTest {
         val refresh = AutoHotmRefresh()
         refresh.request(0L, 0L)
         assertTrue(refresh.poll(0L, guiOpen = false))
-        assertFalse(refresh.menuOpened(4_999L, read = false))
+        assertTrue(refresh.claimMenu(0L, windowMs = 10_000L))
+        assertFalse(refresh.menuOpened(999L, read = false))
         // The controller processes the open menu before expire(now); timeout must still claim closure.
-        assertTrue(refresh.menuOpened(5_000L, read = false))
+        assertTrue(refresh.menuOpened(1_000L, read = false))
         assertFalse(refresh.awaitingMenu())
 
         refresh.request(10_000L, 0L)
@@ -75,9 +77,30 @@ class AutoHotmRefreshTest {
         assertFalse(refresh.expire(5_000L, ownershipWindowMs = 10_000L))
         assertFalse(refresh.awaitingMenu())
         assertTrue(refresh.claimMenu(6_000L, windowMs = 10_000L))
-        assertFalse(refresh.menuOpened(10_999L, read = false))
-        assertTrue(refresh.menuOpened(11_000L, read = false))
-        assertFalse(refresh.claimMenu(11_001L, windowMs = 10_000L))
+        assertFalse(refresh.menuOpened(6_999L, read = false))
+        assertTrue(refresh.menuOpened(7_000L, read = false))
+        assertFalse(refresh.claimMenu(7_001L, windowMs = 10_000L))
+    }
+
+    @Test
+    fun `movement closes an owned menu immediately even before minimum hold`() {
+        val refresh = AutoHotmRefresh()
+        refresh.request(0L, 0L)
+        assertTrue(refresh.poll(0L, guiOpen = false))
+        assertTrue(refresh.claimMenu(100L, windowMs = 10_000L))
+        assertTrue(refresh.menuOpened(101L, read = false, moving = true))
+        assertFalse(refresh.menuOpened(102L, read = true))
+    }
+
+    @Test
+    fun `page turn cannot extend owned menu deadline`() {
+        val refresh = AutoHotmRefresh()
+        refresh.request(0L, 0L)
+        assertTrue(refresh.poll(0L, guiOpen = false))
+        assertTrue(refresh.claimMenu(100L, windowMs = 10_000L))
+        refresh.restartWait(900L)
+        assertFalse(refresh.menuOpened(1_099L, read = false))
+        assertTrue(refresh.menuOpened(1_100L, read = false))
     }
 
     @Test

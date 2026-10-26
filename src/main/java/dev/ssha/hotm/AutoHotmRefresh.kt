@@ -6,7 +6,8 @@ package dev.ssha.hotm
  */
 internal class AutoHotmRefresh(
     private val minIntervalMs: Long = 3_000L,
-    private val readTimeoutMs: Long = 5_000L,
+    // A silent read closes at most one second after its menu opens; a read still missing XP then is reported as such.
+    private val readTimeoutMs: Long = 1_000L,
     private val staleMs: Long = 60_000L,
 ) {
     companion object {
@@ -38,6 +39,8 @@ internal class AutoHotmRefresh(
     private var awaitingSince: Long? = null
     private var activeRead = false
     private var menuClaimed = false
+    private var claimedAt: Long? = null
+    private val minOpenMs = 250L
 
     /** Latest request wins. Use delayMs to let the server finish updating after a claim. */
     fun request(now: Long, delayMs: Long) {
@@ -66,6 +69,7 @@ internal class AutoHotmRefresh(
         awaitingSince = now
         activeRead = true
         menuClaimed = false
+        claimedAt = null
         return true
     }
 
@@ -73,13 +77,15 @@ internal class AutoHotmRefresh(
      * Called each tick while a HOTM menu is open. Returns true when that menu was opened by our
      * request and has been read, so the caller should close it.
      */
-    fun menuOpened(now: Long, read: Boolean): Boolean {
+    fun menuOpened(now: Long, read: Boolean, moving: Boolean = false): Boolean {
         // A fresh HOTM menu is already on screen, so a pending read is redundant.
         dueAt = null
         if (!activeRead) return false
-        val since = awaitingSince ?: return false
-        if (!read && now - since < readTimeoutMs) return false
+        val since = claimedAt ?: awaitingSince ?: return false
+        val elapsed = now - since
+        if (!moving && (elapsed < minOpenMs || (!read && elapsed < readTimeoutMs))) return false
         awaitingSince = null
+        claimedAt = null
         activeRead = false
         menuClaimed = false
         return true
@@ -93,13 +99,14 @@ internal class AutoHotmRefresh(
         if (!activeRead || !sentWithin(now, windowMs)) return false
         if (menuClaimed) return true
         menuClaimed = true
+        claimedAt = now
         awaitingSince = now
         return true
     }
 
-    /** A page turn is part of the same read: give the new page its own full wait from [now]. */
+    /** A page turn belongs to the same menu lifetime; never extend the close deadline. */
     fun restartWait(now: Long) {
-        if (awaitingSince != null) awaitingSince = now
+        if (awaitingSince != null && claimedAt == null) awaitingSince = now
     }
 
     /** True while a read we sent is still waiting for its menu. */

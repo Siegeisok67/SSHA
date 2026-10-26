@@ -34,11 +34,13 @@ internal object AddonConfigMenu {
         resetPowder: () -> Unit,
         checkForUpdates: () -> Unit,
         resetAllGrinding: () -> Unit,
+        moveRare: () -> Unit = {}, resetRarePosition: () -> Unit = {}, resetRare: () -> Unit = {},
         installUpdate: () -> Unit = {},
     ) {
         val config = AddonMenuConfig(settings, save, moveWidget, resetPosition, resetRate, recheck,
             { message -> SshaChat.chat(message) }, moveGrinding, resetGrindingPosition, resetGrinding,
-            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding, installUpdate)
+            movePowder, resetPowderPosition, resetPowder, checkForUpdates, resetAllGrinding, installUpdate,
+            moveRare, resetRarePosition, resetRare)
         val processor = config.createProcessor()
         ConfigUtils.openEditor(MoulConfigEditor(processor))
     }
@@ -62,6 +64,7 @@ class AddonMenuConfig internal constructor(
     checkForUpdates: () -> Unit = {},
     resetAllGrinding: () -> Unit = {},
     installUpdate: () -> Unit = {},
+    moveRare: () -> Unit = {}, resetRarePosition: () -> Unit = {}, resetRare: () -> Unit = {},
 ) : Config() {
     @Expose @JvmField
     @Category(name = "About", desc = "SSHA version, stable updates, credits and project links.")
@@ -79,7 +82,8 @@ class AddonMenuConfig internal constructor(
     @Expose @JvmField
     @Category(name = "Grinding", desc = "Separate compact material widgets. All trackers and popups start disabled.")
     val grinding = GrindingMenuConfig(settings.grinding, save, moveGrinding, resetGrindingPosition, resetGrinding, notify,
-        settings.powder, movePowder, resetPowderPosition, resetPowder, resetAllGrinding)
+        settings.powder, movePowder, resetPowderPosition, resetPowder, resetAllGrinding,
+        settings.grinding.rareSacks, moveRare, resetRarePosition, resetRare)
 
     @Expose @JvmField
     @Category(name = "Extra", desc = "Project links.")

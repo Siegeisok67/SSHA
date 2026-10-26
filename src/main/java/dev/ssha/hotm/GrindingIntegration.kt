@@ -49,6 +49,12 @@ internal class GrindingIntegration(
     private val sacks = SackSnapshot()
     private val craftedProducts = mutableMapOf<GrindingMaterial, Long>()
     private val powderTracker = MithrilPowderTracker()
+    private val rareSacks = RareSackTracker()
+    private val rareWidget = HotmHudIntegration(settings, save, ::rareLines,
+        enabled = { settings().grinding.rareSacks.enabled && MiningArea.current() },
+        editorEnabled = { settings().grinding.rareSacks.enabled },
+        storedPosition = { settings().grinding.rareSacks.position },
+        widgetName = "SSHA Cole Profit Tracker", compactTitle = "Cole Profit Tracker")
     private val powderAccounting = PowderAccounting()
     private val powderWidget = HotmHudIntegration(settings, save, ::powderLines,
         enabled = { settings().powder.enabled && powderArea() }, editorEnabled = { settings().powder.enabled }, storedPosition = { settings().powder.position },
@@ -66,7 +72,7 @@ internal class GrindingIntegration(
     private val enabled = mutableMapOf<GrindingMaterial, Boolean>()
     private val popupAt = mutableMapOf<GrindingMaterial, Long>()
 
-    fun registerWidgets() { widgets.values.forEach { it.register() }; powderWidget.register() }
+    fun registerWidgets() { widgets.values.forEach { it.register() }; powderWidget.register(); rareWidget.register() }
 
     fun tick(minecraft: Minecraft) {
         // Register after SkyHanni handlers are initialized. Its @HandleEvent registration
@@ -132,6 +138,7 @@ internal class GrindingIntegration(
         }
         powderEnabled = trackPowder
         powderWidget.tick(minecraft)
+        rareWidget.tick(minecraft)
         inSkyblock = active
     }
 
@@ -142,6 +149,7 @@ internal class GrindingIntegration(
             .mapValues { (_, changes) -> changes.sumOf { it.delta.toLong() } }
         if (event.otherItemsAdded || event.otherItemsRemoved) sacks.invalidateUnknown(deltas.keys)
         deltas.forEach { (id, delta) -> sacks.change(id, delta) }
+        rareSacks.changes(deltas, time, settings().grinding.rareSacks.enabled && MiningArea.current(), event.otherItemsRemoved)
         GrindingMaterial.entries.forEach { material ->
             val config = settings().grinding[material]
             val inArea = if (material == GrindingMaterial.JEWELS) {
@@ -190,6 +198,7 @@ internal class GrindingIntegration(
     fun onProfileJoin(event: ProfileJoinEvent) {
         if (event.name.isEmpty()) return
         switchProfile(event.name)
+        rareSacks.reset()
         popupAt.clear()
         sacks.clear(); craftedProducts.clear()
         powderAccounting.reset()
@@ -334,6 +343,7 @@ internal class GrindingIntegration(
     fun resetAllSaved() {
         settings().savedTrackers.clear()
         trackers.values.forEach { it.reset() }
+        rareSacks.reset()
         popupAt.clear(); craftedProducts.clear()
         powderTracker.reset(); powderAccounting.reset()
         lastSnapshotAt = Long.MIN_VALUE
@@ -367,10 +377,23 @@ internal class GrindingIntegration(
         powderTracker.restore(saved)
     }
 
+    fun moveRareSacks() = rareWidget.requestEditor()
+    fun resetRareSacksPosition() = rareWidget.resetPosition(8, 550)
+    fun resetRareSacks() = rareSacks.reset()
+    private fun rareLines(): List<Component> {
+        val valuation = rareSacks.valuation { id -> id.toInternalName().getBazaarData()?.instantSellPrice }
+        fun coins(value: Double?): String = value?.let { String.format(Locale.US, "%,.0f", it) } ?: "price unavailable"
+        return listOf(
+            Component.literal("§fRefined Minerals: §a${format(rareSacks.minerals)} §8| §6${coins(valuation.minerals)} coins"),
+            Component.literal("§fGlossy Gemstones: §a${format(rareSacks.gemstones)} §8| §6${coins(valuation.gemstones)} coins"),
+            Component.literal("§fEst. profit: §6${coins(valuation.knownTotal)} coins${if (valuation.partial) " §8(partial BZ)" else ""}"),
+        )
+    }
+
     fun movePowder() = powderWidget.requestEditor()
     fun resetPowderPosition() = powderWidget.resetPosition(8, 500)
     fun resetPowder() { powderTracker.reset(); powderAccounting.reset() }
-    fun render(graphics: GuiGraphicsExtractor) { widgets.values.forEach { it.render(graphics) }; powderWidget.render(graphics) }
+    fun render(graphics: GuiGraphicsExtractor) { widgets.values.forEach { it.render(graphics) }; powderWidget.render(graphics); rareWidget.render(graphics) }
 
     private fun powderArea(): Boolean = MiningArea.current()
     private var lastValueAt = Long.MIN_VALUE

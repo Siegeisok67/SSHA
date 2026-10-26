@@ -64,6 +64,9 @@ class HotmAddon : ClientModInitializer {
     // The silent-read menu after we turned to page 2 for tier 5+ XP; null until that turn happens.
     private var pageTurnedFrom: List<Pair<String, List<String>>>? = null
     private var pageTurnedAt = 0L
+    private var lastPlayerPosition: net.minecraft.world.phys.Vec3? = null
+    private var stationarySince = 0L
+    private var moving = false
 
     private companion object {
         const val PAGE_LOAD_MS = 1_500L
@@ -179,7 +182,10 @@ class HotmAddon : ClientModInitializer {
                 resetGrinding = grindingIntegration::reset, movePowder = grindingIntegration::movePowder,
                 resetPowderPosition = grindingIntegration::resetPowderPosition, resetPowder = grindingIntegration::resetPowder,
                 checkForUpdates = ::checkForUpdates, resetAllGrinding = grindingIntegration::resetAllSaved,
-                installUpdate = ::installAvailableUpdate)
+                installUpdate = ::installAvailableUpdate,
+                moveRare = grindingIntegration::moveRareSacks,
+                resetRarePosition = grindingIntegration::resetRareSacksPosition,
+                resetRare = grindingIntegration::resetRareSacks)
         }
         if (AddonSettings.data.rateEnabled != lastRateEnabled) {
             rateTracker.suspend(now)
@@ -225,7 +231,19 @@ class HotmAddon : ClientModInitializer {
         // Manual progress means automatic capture is paused, so no silent /hotm reads until /ssha auto resumes it.
         // A request is only consumed when a read can actually be sent (in SkyBlock, not manual).
         val readable = !AddonSettings.data.manualProgress && SkyBlockUtils.inSkyBlock
-        if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null, enabled = readable)) {
+        // Hypixel can punish movement while its menu is open; do not initiate reads until still.
+        val position = minecraft.player?.position()
+        if (position == null) { lastPlayerPosition = null; stationarySince = now; moving = false }
+        else {
+            val previous = lastPlayerPosition
+            moving = previous == null || position.distanceToSqr(previous) > 0.0001 ||
+                minecraft.options.keyUp.isDown || minecraft.options.keyDown.isDown ||
+                minecraft.options.keyLeft.isDown || minecraft.options.keyRight.isDown || minecraft.options.keyJump.isDown
+            if (moving) stationarySince = now
+            lastPlayerPosition = position
+        }
+        val safeToRead = position != null && now - stationarySince >= 500L
+        if (autoRefresh.poll(now, guiOpen = minecraft.gui.screen() != null || hiddenMenu != null, enabled = readable && safeToRead)) {
             // A new read starts from page 1; a stale page-turn record would skip the next turn.
             pageTurnedFrom = null
             minecraft.player?.connection?.sendCommand("hotm")
@@ -238,12 +256,12 @@ class HotmAddon : ClientModInitializer {
             val hiddenObservation = recordMenu(items)?.also(::applyObservation)
             // Check completion/timeout before waiting on an empty or changing page, so an
             // owned menu can never be kept open by turnToXpPage's loading path.
-            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation) || xpPageUnreachable(hidden, hiddenObservation))) {
+            if (autoRefresh.menuOpened(now, HotmProgress.readComplete(hiddenObservation) || xpPageUnreachable(hidden, hiddenObservation), moving)) {
                 reportUserRead(hiddenObservation)
                 hiddenMenu = null
                 pageTurnedFrom = null
                 minecraft.player?.closeContainer()
-            } else if (turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
+            } else if (!moving && turnToXpPage(minecraft, hidden, items, hiddenObservation, now)) return@let
             else if (!autoRefresh.awaitingMenu()) {
                 // The wait expired without a usable read. Drop the claim so future silent
                 // reads are hidden again instead of flashing visible menus forever.
@@ -261,8 +279,8 @@ class HotmAddon : ClientModInitializer {
             // it once read. A menu the player opened themselves is never paged or closed.
             if (hiddenMenu == null && autoRefresh.claimMenu(now, READ_OWNERSHIP_MS)) {
                 // Allow a page turn to restart the timeout before the timeout branch consumes this menu.
-                val shouldWaitForPage = turnToXpPage(minecraft, container, items, observation, now)
-                if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation) || xpPageUnreachable(container, observation))) {
+                val shouldWaitForPage = if (moving) false else turnToXpPage(minecraft, container, items, observation, now)
+                if (autoRefresh.menuOpened(now, HotmProgress.readComplete(observation) || xpPageUnreachable(container, observation), moving)) {
                     reportUserRead(observation)
                     pageTurnedFrom = null
                     // Close both the local GUI and server-side container.

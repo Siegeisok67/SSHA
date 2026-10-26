@@ -6,6 +6,56 @@ import org.junit.jupiter.api.Test
 
 class MiningRegressionTest {
     @Test
+    fun `rare sack tracker counts only active positive deltas and resets between profiles`() {
+        val tracker = RareSackTracker()
+        tracker.changes(mapOf(RareSackTracker.MINERAL to 12L), 0L, active = false)
+        tracker.changes(mapOf(RareSackTracker.MINERAL to 3L), 100L, active = true)
+        tracker.changes(mapOf(RareSackTracker.GEMSTONE to 2L), 200L, active = true)
+        assertEquals(3L, tracker.minerals)
+        assertEquals(2L, tracker.gemstones)
+        assertEquals(null, tracker.perHour(tracker.minerals, 59_000L))
+        assertEquals(180.0, tracker.perHour(tracker.minerals, 60_100L))
+        tracker.reset()
+        assertEquals(0L, tracker.minerals)
+        assertEquals(0L, tracker.gemstones)
+    }
+
+    @Test
+    fun `Cole tracker rejects sack transfers with removals even when target items increase`() {
+        val tracker = RareSackTracker()
+        tracker.changes(mapOf(RareSackTracker.MINERAL to 4L, "MITHRIL_ORE" to -1L), 100L, active = true)
+        tracker.changes(mapOf(RareSackTracker.GEMSTONE to 2L), 200L, active = true, incompleteRemovals = true)
+        assertEquals(0L, tracker.minerals)
+        assertEquals(0L, tracker.gemstones)
+        tracker.changes(mapOf(RareSackTracker.MINERAL to 1L), 300L, active = true)
+        assertEquals(1L, tracker.minerals)
+    }
+
+    @Test
+    fun `powder chest reward stays in session if leaving area during reconciliation`() {
+        val tracker = MithrilPowderTracker()
+        tracker.eventDrop("PREHISTORIC_EGG", 2L, 0L)
+        tracker.suspend(100L)
+        assertEquals(2_000.0, tracker.valuation { if (it == "PREHISTORIC_EGG") 1_000.0 else null }.coins)
+    }
+
+    @Test
+    fun `Cole profit uses session gains and valid instant sell prices without inventing missing value`() {
+        val tracker = RareSackTracker()
+        assertEquals(RareSackTracker.Valuation(0.0, 0.0), tracker.valuation { null })
+        tracker.changes(mapOf(RareSackTracker.MINERAL to 3L, RareSackTracker.GEMSTONE to 2L), 100L, active = true)
+        assertEquals(RareSackTracker.Valuation(600.0, 1_000.0), tracker.valuation {
+            if (it == RareSackTracker.MINERAL) 200.0 else 500.0
+        })
+        val partial = tracker.valuation { if (it == RareSackTracker.MINERAL) 200.0 else null }
+        assertEquals(600.0, partial.knownTotal)
+        assertTrue(partial.partial)
+        assertEquals(null, tracker.valuation { Double.NaN }.minerals)
+        tracker.reset()
+        assertEquals(RareSackTracker.Valuation(0.0, 0.0), tracker.valuation { null })
+    }
+
+    @Test
     fun `lobby and other islands never display mining HUD`() {
         assertFalse(MiningArea.allowed(false, IslandType.DWARVEN_MINES, "Glacite Tunnels"))
         assertFalse(MiningArea.allowed(true, IslandType.NONE, null))

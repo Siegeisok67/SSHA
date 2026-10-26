@@ -114,7 +114,15 @@ internal class MithrilPowderTracker {
         return "%02d:%02d:%02d".format(java.util.Locale.US, seconds / 3_600, seconds / 60 % 60, seconds % 60)
     }
     fun paused(now: Long): Boolean = lastActivity?.let { now - it >= CommissionRateTracker.IDLE_TIMEOUT_MS } ?: true
-    fun suspend(now: Long) { tick(now); pendingProfit.clear(); lastActivity = null; mithril.suspend(now); titanium.suspend(now) }
+    fun suspend(now: Long) {
+        tick(now)
+        // Already-observed chest rewards still belong to this session even if we leave the area
+        // before their reconciliation delay expires.
+        pendingProfit.forEach { (_, batch) -> batch.forEach { (id, amount) -> drops[id] = (drops[id] ?: 0L) + amount } }
+        pendingProfit.clear()
+        lastActivity = null
+        mithril.suspend(now); titanium.suspend(now)
+    }
     fun reset() {
         mithril.reset(); titanium.reset(); powderRate.reset(); profitRate.reset(); drops.clear(); miningDrops.clear(); pendingProfit.clear()
         powder = 0L; powderDuringEvents = 0L; activeMillis = 0L; creditedThrough = null; lastActivity = null
